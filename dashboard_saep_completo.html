@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard SAEP - Visualização Completa</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  
+  body {
+    font-family: 'Inter', sans-serif;
+    background: #f5f5f5;
+    color: #212529;
+  }
+  
+  .header {
+    background: linear-gradient(135deg, #004c97 0%, #003d7a 100%);
+    color: white;
+    padding: 1.5rem 2rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+  
+  .header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+  }
+  
+  .logo {
+    font-size: 2.5rem;
+    font-weight: 700;
+    letter-spacing: -1px;
+  }
+  
+  .header-info {
+    text-align: right;
+    font-size: 0.9rem;
+    opacity: 0.95;
+  }
+  
+  .header-title {
+    font-size: 1.4rem;
+    font-weight: 500;
+  }
+  
+  #uploadZone {
+    max-width: 1000px;
+    margin: 3rem auto;
+    padding: 0 2rem;
+  }
+  
+  .upload-box {
+    background: white;
+    border: 3px dashed #d0d0d0;
+    border-radius: 12px;
+    padding: 4rem 2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+  
+  .upload-box:hover {
+    border-color: #004c97;
+    background: #fafafa;
+    transform: translateY(-2px);
+  }
+  
+  #fileInput { display: none; }
+  
+  .file-list { margin-top: 1.5rem; }
+  
+  .file-item {
+    background: white;
+    padding: 1.2rem 1.5rem;
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border: 1px solid #e0e0e0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+  
+  .btn {
+    background: linear-gradient(135deg, #ff6600, #ff8533);
+    color: white;
+    border: none;
+    padding: 1rem 2.5rem;
+    border-radius: 8px;
+    font-size: 1.05rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 1.5rem;
+    transition: all 0.3s;
+    box-shadow: 0 4px 12px rgba(255, 102, 0, 0.3);
+  }
+  
+  .btn:hover { 
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(255, 102, 0, 0.4);
+  }
+  .btn:disabled { 
+    opacity: 0.5; 
+    cursor: not-allowed;
+    transform: none;
+  }
+  
+  #dashboard {
+    display: none;
+    padding: 2rem;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+  
+  #dashboard.active { display: block; }
+  
+  .tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 2rem;
+    border-bottom: 2px solid #e0e0e0;
+    overflow-x: auto;
+  }
+  
+  .tab {
+    padding: 1rem 2rem;
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: #666;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  
+  .tab.active {
+    color: #004c97;
+    border-bottom-color: #ff6600;
+  }
+  
+  .tab:hover:not(.active) {
+    color: #004c97;
+  }
+  
+  .turma-panel { display: none; }
+  .turma-panel.active { display: block; animation: fadeIn 0.3s; }
+  
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  
+  .titulo-secao {
+    background: white;
+    padding: 1.5rem 2rem;
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    border-left: 5px solid #004c97;
+  }
+  
+  .titulo-secao h2 {
+    font-size: 1.5rem;
+    color: #004c97;
+    margin-bottom: 0.5rem;
+  }
+  
+  .titulo-secao p {
+    color: #666;
+    font-size: 0.95rem;
+  }
+  
+  .estatisticas-gerais {
+    background: white;
+    padding: 2rem;
+    border-radius: 12px;
+    margin-bottom: 2rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
+  
+  .stats-titulo {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+    color: #212529;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  
+  .stats-titulo .material-icons {
+    color: #ff6600;
+  }
+  
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+  }
+  
+  .stat-item {
+    padding: 1.5rem;
+    background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+    border-radius: 10px;
+    border-left: 4px solid;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+  }
+  
+  .stat-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #666;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+  }
+  
+  .stat-valor {
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+  
+  .stat-sub {
+    font-size: 0.85rem;
+    color: #999;
+    margin-top: 0.3rem;
+  }
+  
+  .tabela-alunos {
+    background: white;
+    padding: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    overflow-x: auto;
+  }
+  
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  
+  thead th {
+    background: linear-gradient(135deg, #004c97 0%, #003d7a 100%);
+    color: white;
+    padding: 1rem;
+    text-align: left;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  
+  thead th:first-child {
+    border-radius: 8px 0 0 0;
+  }
+  
+  thead th:last-child {
+    border-radius: 0 8px 0 0;
+  }
+  
+  tbody td {
+    padding: 1rem;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  
+  tbody tr {
+    transition: background 0.2s;
+  }
+  
+  tbody tr:hover {
+    background: #f8f9fa;
+  }
+  
+  tbody tr:last-child td {
+    border-bottom: none;
+  }
+  
+  .badge {
+    display: inline-block;
+    padding: 0.4rem 0.9rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    text-align: center;
+    min-width: 70px;
+  }
+  
+  .badge-excelente { background: #d4edda; color: #155724; }
+  .badge-bom { background: #d1ecf1; color: #0c5460; }
+  .badge-regular { background: #fff3cd; color: #856404; }
+  .badge-insuficiente { background: #f8d7da; color: #721c24; }
+  
+  .ranking {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 35px;
+    height: 35px;
+    border-radius: 50%;
+    background: #f0f0f0;
+    font-weight: 700;
+    color: #666;
+  }
+  
+  .ranking.top3 {
+    background: linear-gradient(135deg, #ffd700, #ffed4e);
+    color: #856404;
+  }
+  
+  .nome-destaque {
+    font-weight: 600;
+    color: #212529;
+  }
+  
+  .tempo-rapido {
+    color: #28a745;
+    font-weight: 600;
+  }
+  
+  .tempo-normal {
+    color: #6c757d;
+  }
+  
+  .tempo-lento {
+    color: #dc3545;
+    font-weight: 600;
+  }
+  
+  /* MODAL DETALHES */
+  .detalhes-row {
+    display: none;
+  }
+  
+  .detalhes-row.open {
+    display: table-row;
+  }
+  
+  .detalhes-cell {
+    padding: 0 !important;
+    background: #f8f9fa;
+    border-top: 2px solid #004c97 !important;
+  }
+  
+  .detalhes-conteudo {
+    padding: 2rem;
+    animation: slideDown 0.3s;
+  }
+  
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  
+  .detalhes-titulo {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+    color: #004c97;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  
+  .questoes-grid {
+    display: grid;
+    gap: 1rem;
+  }
+  
+  .questao-item {
+    background: white;
+    padding: 1rem;
+    border-radius: 8px;
+    border-left: 4px solid;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+  
+  .questao-item.acertou {
+    border-left-color: #28a745;
+    background: #f8fff9;
+  }
+  
+  .questao-item.errou {
+    border-left-color: #dc3545;
+    background: #fff8f8;
+  }
+  
+  .questao-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+  }
+  
+  .questao-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+  }
+  
+  .questao-status.acertou {
+    color: #28a745;
+  }
+  
+  .questao-status.errou {
+    color: #dc3545;
+  }
+  
+  .questao-dificuldade {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    background: #e9ecef;
+    color: #495057;
+    font-weight: 600;
+  }
+  
+  .questao-info {
+    font-size: 0.85rem;
+    line-height: 1.6;
+  }
+  
+  .questao-info strong {
+    color: #004c97;
+  }
+  
+  .questao-resposta {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #dee2e6;
+  }
+  
+  .resposta-box {
+    padding: 0.5rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+  }
+  
+  .resposta-box.marcacao {
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+  }
+  
+  .resposta-box.gabarito {
+    background: #d4edda;
+    border: 1px solid #28a745;
+  }
+  
+  .clickable-row {
+    cursor: pointer;
+  }
+  
+  .clickable-row:hover {
+    background: #e8f4ff !important;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-top">
+    <div class="logo">SENAI</div>
+    <div class="header-info">
+      <div><strong>SENAI/SC</strong> - Jaraguá do Sul</div>
+      <div id="dataInfo"></div>
+    </div>
+  </div>
+  <div class="header-title">Sistema de Acompanhamento de Desempenho - SAEP</div>
+</div>
+
+<div id="uploadZone">
+  <div class="upload-box" id="uploadBox">
+    <div style="font-size: 4rem; color: #ff6600; margin-bottom: 1rem;">
+      <span class="material-icons" style="font-size: 4rem;">upload_file</span>
+    </div>
+    <h2 style="margin-bottom: 0.5rem;">Carregar Planilhas de Avaliação</h2>
+    <p style="color: #666; font-size: 1.05rem;">Arraste os arquivos .xls ou .xlsx aqui ou clique para selecionar</p>
+    <input type="file" id="fileInput" multiple accept=".xls,.xlsx">
+  </div>
+  <div class="file-list" id="fileList"></div>
+  <button class="btn" id="processBtn" disabled>Processar e Visualizar Dados</button>
+</div>
+
+<div id="dashboard">
+  <div class="tabs" id="tabs"></div>
+  <div id="content"></div>
+</div>
+
+<script>
+const uploadBox = document.getElementById('uploadBox');
+const fileInput = document.getElementById('fileInput');
+const fileList = document.getElementById('fileList');
+const processBtn = document.getElementById('processBtn');
+
+let arquivos = [];
+
+uploadBox.addEventListener('click', () => fileInput.click());
+uploadBox.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  uploadBox.style.borderColor = '#004c97';
+  uploadBox.style.background = '#f0f7ff';
+});
+uploadBox.addEventListener('dragleave', () => {
+  uploadBox.style.borderColor = '#d0d0d0';
+  uploadBox.style.background = 'white';
+});
+uploadBox.addEventListener('drop', (e) => {
+  e.preventDefault();
+  uploadBox.style.borderColor = '#d0d0d0';
+  uploadBox.style.background = 'white';
+  handleFiles(e.dataTransfer.files);
+});
+
+fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+
+function handleFiles(files) {
+  arquivos = Array.from(files).filter(f => f.name.endsWith('.xls') || f.name.endsWith('.xlsx'));
+  
+  if (arquivos.length === 0) {
+    fileList.innerHTML = '';
+    processBtn.disabled = true;
+    return;
+  }
+  
+  fileList.innerHTML = arquivos.map(f => `
+    <div class="file-item">
+      <span style="display: flex; align-items: center; gap: 0.75rem;">
+        <span class="material-icons" style="color: #ff6600; font-size: 1.8rem;">description</span>
+        <div>
+          <div style="font-weight: 600; font-size: 1.05rem;">${f.name}</div>
+          <div style="color: #999; font-size: 0.85rem;">${(f.size/1024).toFixed(1)} KB</div>
+        </div>
+      </span>
+      <span class="material-icons" style="color: #28a745;">check_circle</span>
+    </div>
+  `).join('');
+  
+  processBtn.disabled = false;
+}
+
+processBtn.addEventListener('click', async () => {
+  processBtn.disabled = true;
+  processBtn.innerHTML = '<span class="material-icons" style="animation: spin 1s linear infinite;">sync</span> Processando...';
+  
+  const turmas = {};
+  
+  for (const arquivo of arquivos) {
+    const dados = await lerPlanilha(arquivo);
+    const nomeArquivo = arquivo.name.replace('.xls', '').replace('.xlsx', '');
+    turmas[nomeArquivo] = dados;
+  }
+  
+  mostrarDashboard(turmas);
+  
+  document.getElementById('uploadZone').style.display = 'none';
+  document.getElementById('dashboard').classList.add('active');
+});
+
+async function lerPlanilha(arquivo) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type: 'array' });
+      
+      // Ler aba principal
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      
+      // Ler aba de detalhes por questão (se existir)
+      let detalhes = null;
+      const abaDetalhes = wb.SheetNames.find(nome => nome.includes('por Registro'));
+      if (abaDetalhes) {
+        const wsDetalhes = wb.Sheets[abaDetalhes];
+        detalhes = XLSX.utils.sheet_to_json(wsDetalhes, { header: 1, defval: '' });
+      }
+      
+      resolve(processarDados(json, detalhes));
+    };
+    reader.readAsArrayBuffer(arquivo);
+  });
+}
+
+function processarDados(data, detalhes) {
+  // Linha 0: Título
+  const titulo = data[0] ? data[0][0] : 'ESTATÍSTICA DA APLICAÇÃO';
+  
+  // Linha 1: Subtítulo
+  const subtitulo = data[1] ? data[1][0] : 'Desempenho Individual';
+  
+  // Linha 4: Estatísticas
+  const stats = data[4] || [];
+  const desempenho = parseFloat((stats[0] || '0').toString().replace('%','').replace(',','.'));
+  const acertosMedio = parseFloat((stats[1] || '0').toString().replace(',','.'));
+  const errosMedio = parseFloat((stats[2] || '0').toString().replace(',','.'));
+  const totalItens = parseInt(stats[3] || 0);
+  const respondentes = parseInt(stats[4] || 0);
+  
+  // Linha 5: Labels das estatísticas
+  const labelsStats = data[5] || [];
+  
+  // Linha 8: Headers da tabela
+  const headers = data[8] || ['Aluno', 'Matrícula', 'Desempenho', 'Acertos', 'Erros', 'Tempo de realização'];
+  
+  // Encontrar início dos alunos
+  let inicioAlunos = 9;
+  for (let i = 0; i < data.length; i++) {
+    if (data[i] && data[i][0] === 'Aluno') {
+      inicioAlunos = i + 1;
+      break;
+    }
+  }
+  
+  // Ler TODOS os alunos
+  const alunos = [];
+  for (let i = inicioAlunos; i < data.length; i++) {
+    const row = data[i];
+    if (!row || !row[0] || typeof row[0] !== 'string') continue;
+    
+    const nome = row[0].trim();
+    if (nome === '' || nome === 'Aluno') continue;
+    
+    const matricula = row[1];
+    
+    alunos.push({
+      nome,
+      matricula,
+      desempenho: parseFloat((row[2] || '0').toString().replace('%','').replace(',','.')),
+      acertos: parseInt(row[3] || 0),
+      erros: parseInt(row[4] || 0),
+      tempo: row[5] || ''
+    });
+  }
+  
+  // Processar detalhes das questões por aluno
+  const detalhesAlunos = {};
+  if (detalhes && detalhes.length > 5) {
+    for (let i = 5; i < detalhes.length; i++) {
+      const row = detalhes[i];
+      if (!row || row.length < 22) continue;
+      
+      const nomeAluno = row[8];
+      const matriculaAluno = row[9];
+      
+      if (!nomeAluno || !matriculaAluno) continue;
+      
+      const chave = `${matriculaAluno}`;
+      
+      if (!detalhesAlunos[chave]) {
+        detalhesAlunos[chave] = [];
+      }
+      
+      const marcacao = row[20];
+      const gabarito = row[21];
+      const acertou = marcacao === gabarito;
+      
+      detalhesAlunos[chave].push({
+        identificador: row[14],
+        capacidade: row[15],
+        subfuncao: row[16],
+        padraoDesempenho: row[17],
+        conhecimento: row[18],
+        dificuldade: row[19],
+        marcacao: marcacao,
+        gabarito: gabarito,
+        acertou: acertou
+      });
+    }
+  }
+  
+  // Adicionar detalhes aos alunos
+  alunos.forEach(aluno => {
+    const chave = `${aluno.matricula}`;
+    aluno.questoes = detalhesAlunos[chave] || [];
+  });
+  
+  return {
+    titulo,
+    subtitulo,
+    desempenho,
+    acertosMedio,
+    errosMedio,
+    totalItens,
+    respondentes,
+    labelsStats,
+    headers,
+    alunos
+  };
+}
+
+function mostrarDashboard(turmas) {
+  const nomes = Object.keys(turmas);
+  
+  document.getElementById('dataInfo').textContent = 'Processado em: ' + new Date().toLocaleString('pt-BR');
+  
+  const tabsHTML = nomes.map((nome, i) => 
+    `<button class="tab ${i===0?'active':''}" onclick="trocarTurma(${i})">${nome}</button>`
+  ).join('');
+  document.getElementById('tabs').innerHTML = tabsHTML;
+  
+  const paineis = nomes.map((nome, i) => criarPainel(turmas[nome], nome, i)).join('');
+  document.getElementById('content').innerHTML = paineis;
+  
+  window.turmasNomes = nomes;
+}
+
+function criarPainel(turma, nomeTurma, index) {
+  const melhor = turma.alunos.reduce((max, a) => a.desempenho > max.desempenho ? a : max, turma.alunos[0]);
+  const pior = turma.alunos.reduce((min, a) => a.desempenho < min.desempenho ? a : min, turma.alunos[0]);
+  
+  // Calcular tempos médios
+  const tempos = turma.alunos.map(a => {
+    const partes = a.tempo.split(':');
+    if (partes.length === 3) {
+      return parseInt(partes[0]) * 3600 + parseInt(partes[1]) * 60 + parseInt(partes[2]);
+    }
+    return 0;
+  }).filter(t => t > 0);
+  
+  const tempoMedio = tempos.length > 0 ? tempos.reduce((a, b) => a + b, 0) / tempos.length : 0;
+  
+  function formatarTempo(segundos) {
+    const h = Math.floor(segundos / 3600);
+    const m = Math.floor((segundos % 3600) / 60);
+    const s = Math.floor(segundos % 60);
+    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }
+  
+  // Alunos acima da média
+  const alunosAcimaDaMedia = turma.alunos.filter(a => a.desempenho >= turma.desempenho).length;
+  
+  return `
+    <div class="turma-panel ${index===0?'active':''}" id="turma-${index}">
+      
+      <div class="titulo-secao">
+        <h2>${turma.titulo}</h2>
+        <p>${turma.subtitulo} - Turma: ${nomeTurma}</p>
+      </div>
+      
+      <div class="estatisticas-gerais">
+        <div class="stats-titulo">
+          <span class="material-icons">analytics</span>
+          Estatísticas Gerais da Turma
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item" style="border-left-color: #004c97;">
+            <div class="stat-label">${turma.labelsStats[0] || 'Desempenho na Avaliação'}</div>
+            <div class="stat-valor" style="color: #004c97;">${turma.desempenho.toFixed(2)}%</div>
+          </div>
+          <div class="stat-item" style="border-left-color: #28a745;">
+            <div class="stat-label">${turma.labelsStats[1] || 'Acertos Médio'}</div>
+            <div class="stat-valor" style="color: #28a745;">${turma.acertosMedio.toFixed(2)}</div>
+            <div class="stat-sub">de ${turma.totalItens} questões</div>
+          </div>
+          <div class="stat-item" style="border-left-color: #dc3545;">
+            <div class="stat-label">${turma.labelsStats[2] || 'Erros Médio'}</div>
+            <div class="stat-valor" style="color: #dc3545;">${turma.errosMedio.toFixed(2)}</div>
+            <div class="stat-sub">de ${turma.totalItens} questões</div>
+          </div>
+          <div class="stat-item" style="border-left-color: #ffc107;">
+            <div class="stat-label">${turma.labelsStats[3] || 'Itens'}</div>
+            <div class="stat-valor" style="color: #ffc107;">${turma.totalItens}</div>
+            <div class="stat-sub">questões na prova</div>
+          </div>
+          <div class="stat-item" style="border-left-color: #17a2b8;">
+            <div class="stat-label">${turma.labelsStats[4] || 'Respondentes'}</div>
+            <div class="stat-valor" style="color: #17a2b8;">${turma.respondentes}</div>
+            <div class="stat-sub">alunos avaliados</div>
+          </div>
+          <div class="stat-item" style="border-left-color: #6f42c1;">
+            <div class="stat-label">Tempo Médio</div>
+            <div class="stat-valor" style="color: #6f42c1; font-size: 1.5rem;">${formatarTempo(tempoMedio)}</div>
+            <div class="stat-sub">duração da prova</div>
+          </div>
+          <div class="stat-item" style="border-left-color: #20c997;">
+            <div class="stat-label">Melhor Desempenho</div>
+            <div class="stat-valor" style="color: #20c997; font-size: 1.3rem;">${melhor.desempenho.toFixed(1)}%</div>
+            <div class="stat-sub">${melhor.nome}</div>
+          </div>
+          <div class="stat-item" style="border-left-color: #fd7e14;">
+            <div class="stat-label">Acima da Média</div>
+            <div class="stat-valor" style="color: #fd7e14;">${alunosAcimaDaMedia}</div>
+            <div class="stat-sub">${((alunosAcimaDaMedia/turma.respondentes)*100).toFixed(1)}% da turma</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="tabela-alunos">
+        <div class="stats-titulo" style="margin-bottom: 1.5rem;">
+          <span class="material-icons">people</span>
+          Desempenho Individual de Todos os Alunos
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 60px; text-align: center;">Rank</th>
+              <th>${turma.headers[0]}</th>
+              <th style="width: 130px;">${turma.headers[1]}</th>
+              <th style="width: 130px; text-align: center;">${turma.headers[2]}</th>
+              <th style="width: 100px; text-align: center;">${turma.headers[3]}</th>
+              <th style="width: 100px; text-align: center;">${turma.headers[4]}</th>
+              <th style="width: 140px; text-align: center;">${turma.headers[5]}</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${turma.alunos.map((a, i) => {
+              let badge = 'badge-insuficiente';
+              if (a.desempenho >= 90) badge = 'badge-excelente';
+              else if (a.desempenho >= 70) badge = 'badge-bom';
+              else if (a.desempenho >= 50) badge = 'badge-regular';
+              
+              const rankClass = i < 3 ? 'ranking top3' : 'ranking';
+              
+              // Classificar tempo
+              const partesT = a.tempo.split(':');
+              let segundosAluno = 0;
+              if (partesT.length === 3) {
+                segundosAluno = parseInt(partesT[0]) * 3600 + parseInt(partesT[1]) * 60 + parseInt(partesT[2]);
+              }
+              
+              let tempoClass = 'tempo-normal';
+              if (segundosAluno > 0) {
+                if (segundosAluno < tempoMedio * 0.8) tempoClass = 'tempo-rapido';
+                else if (segundosAluno > tempoMedio * 1.2) tempoClass = 'tempo-lento';
+              }
+              
+              return `
+                <tr class="clickable-row" onclick="toggleDetalhes('aluno-${index}-${i}')">
+                  <td style="text-align: center;">
+                    <div class="${rankClass}">${i+1}º</div>
+                  </td>
+                  <td><span class="nome-destaque">${a.nome}</span></td>
+                  <td>${a.matricula}</td>
+                  <td style="text-align: center;">
+                    <span class="badge ${badge}">${a.desempenho.toFixed(1)}%</span>
+                  </td>
+                  <td style="text-align: center; color: #28a745; font-weight: 700; font-size: 1.1rem;">${a.acertos}</td>
+                  <td style="text-align: center; color: #dc3545; font-weight: 700; font-size: 1.1rem;">${a.erros}</td>
+                  <td style="text-align: center;" class="${tempoClass}">${a.tempo}</td>
+                </tr>
+                <tr class="detalhes-row" id="detalhes-aluno-${index}-${i}">
+                  <td colspan="7" class="detalhes-cell">
+                    <div class="detalhes-conteudo">
+                      ${gerarDetalhesAluno(a)}
+                    </div>
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+      
+    </div>
+  `;
+}
+
+function trocarTurma(index) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active', i === index);
+  });
+  document.querySelectorAll('.turma-panel').forEach((p, i) => {
+    p.classList.toggle('active', i === index);
+  });
+}
+
+function toggleDetalhes(id) {
+  const detalhesRow = document.getElementById('detalhes-' + id);
+  if (detalhesRow) {
+    detalhesRow.classList.toggle('open');
+  }
+}
+
+function gerarDetalhesAluno(aluno) {
+  if (!aluno.questoes || aluno.questoes.length === 0) {
+    return `
+      <div class="detalhes-titulo">
+        <span class="material-icons">info</span>
+        Detalhes de ${aluno.nome}
+      </div>
+      <p style="color: #6c757d;">Informações detalhadas por questão não disponíveis nesta planilha.</p>
+    `;
+  }
+  
+  const erros = aluno.questoes.filter(q => !q.acertou);
+  const acertos = aluno.questoes.filter(q => q.acertou);
+  
+  return `
+    <div class="detalhes-titulo">
+      <span class="material-icons">assignment</span>
+      Detalhamento por Questão - ${aluno.nome}
+      <span style="margin-left: auto; font-size: 0.9rem; color: #6c757d;">
+        ${acertos.length} acertos · ${erros.length} erros
+      </span>
+    </div>
+    
+    ${erros.length > 0 ? `
+      <div style="margin-bottom: 2rem;">
+        <h4 style="color: #dc3545; margin-bottom: 1rem; font-size: 1rem;">
+          <span class="material-icons" style="vertical-align: middle; font-size: 1.2rem;">close</span>
+          Questões com Erro (${erros.length})
+        </h4>
+        <div class="questoes-grid">
+          ${erros.map((q, idx) => `
+            <div class="questao-item errou">
+              <div class="questao-header">
+                <div class="questao-status errou">
+                  <span class="material-icons">cancel</span>
+                  Erro #${idx + 1}
+                </div>
+                <div class="questao-dificuldade">${q.dificuldade || 'N/A'}</div>
+              </div>
+              <div class="questao-info">
+                <div style="margin-bottom: 0.5rem;"><strong>Conhecimento:</strong> ${q.conhecimento || 'N/A'}</div>
+                <div style="margin-bottom: 0.5rem;"><strong>Subfunção:</strong> ${q.subfuncao || 'N/A'}</div>
+                <div style="margin-bottom: 0.5rem; font-size: 0.8rem; color: #666;"><strong>Padrão:</strong> ${q.padraoDesempenho || 'N/A'}</div>
+              </div>
+              <div class="questao-resposta">
+                <div class="resposta-box marcacao">
+                  <strong>Sua resposta:</strong> ${q.marcacao || 'Não respondeu'}
+                </div>
+                <div class="resposta-box gabarito">
+                  <strong>Resposta correta:</strong> ${q.gabarito}
+                </div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : ''}
+    
+    ${acertos.length > 0 ? `
+      <div>
+        <h4 style="color: #28a745; margin-bottom: 1rem; font-size: 1rem;">
+          <span class="material-icons" style="vertical-align: middle; font-size: 1.2rem;">check_circle</span>
+          Questões Corretas (${acertos.length})
+        </h4>
+        <div class="questoes-grid">
+          ${acertos.slice(0, 5).map((q, idx) => `
+            <div class="questao-item acertou">
+              <div class="questao-header">
+                <div class="questao-status acertou">
+                  <span class="material-icons">check_circle</span>
+                  Acerto #${idx + 1}
+                </div>
+                <div class="questao-dificuldade">${q.dificuldade || 'N/A'}</div>
+              </div>
+              <div class="questao-info">
+                <div style="margin-bottom: 0.5rem;"><strong>Conhecimento:</strong> ${q.conhecimento || 'N/A'}</div>
+                <div style="margin-bottom: 0.5rem;"><strong>Subfunção:</strong> ${q.subfuncao || 'N/A'}</div>
+              </div>
+            </div>
+          `).join('')}
+          ${acertos.length > 5 ? `<p style="color: #6c757d; text-align: center; margin-top: 1rem;">... e mais ${acertos.length - 5} questões corretas</p>` : ''}
+        </div>
+      </div>
+    ` : ''}
+  `;
+}
+</script>
+
+<style>
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+</style>
+
+</body>
+</html>
