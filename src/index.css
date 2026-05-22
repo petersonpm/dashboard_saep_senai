@@ -147,7 +147,7 @@ body {
 /* Header Styles */
 .header {
   border-bottom: 1px solid var(--border-color);
-  background: rgba(13, 17, 29, 0.5);
+  background: rgba(13, 17, 29, 0.9);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   position: sticky;
