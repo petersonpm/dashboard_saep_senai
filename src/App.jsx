@@ -2010,8 +2010,23 @@ export default function App() {
 
           </div>
         )}
-
       </main>
+
+      <footer className="footer animate-fade-in">
+        <div className="container footer-content">
+          <div className="footer-left">
+            <p className="footer-copyright">
+              © {new Date().getFullYear()} - Desenvolvido por <span className="footer-highlight">Peterson Ferreira</span>
+            </p>
+            <p className="footer-subtext">Dashboard SAEP - Portal de Acompanhamento e Análise Pedagógica Avançada</p>
+          </div>
+          <div className="footer-right">
+            <span className="footer-info-badge">Versão 1.2.0</span>
+            <span className="footer-info-badge">React & Vite</span>
+            <span className="footer-info-badge">SENAI</span>
+          </div>
+        </div>
+      </footer>
     </div>
 
       {/* Import Help Modal Dialog */}

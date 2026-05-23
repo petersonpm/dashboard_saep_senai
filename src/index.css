@@ -1870,3 +1870,68 @@ body {
     padding-bottom: 56px; /* spacing for mobile bottom bar */
   }
 }
+
+/* Footer Styles */
+.footer {
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  padding: 2rem 0;
+  margin-top: auto;
+  width: 100%;
+}
+
+.footer-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+}
+
+.footer-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.footer-copyright {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.footer-highlight {
+  color: var(--accent-cyan);
+  font-weight: 600;
+}
+
+.footer-subtext {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.footer-right {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.footer-info-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+@media (max-width: 768px) {
+  .footer-content {
+    flex-direction: column;
+    text-align: center;
+    align-items: center;
+  }
+  .footer-right {
+    justify-content: center;
+  }
+}
