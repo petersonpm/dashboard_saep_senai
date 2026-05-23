@@ -53,6 +53,7 @@ export default function App() {
   const [alunoQuestaoFilter, setAlunoQuestaoFilter] = useState('todas'); // 'todas' | 'acertos' | 'erros'
   const [registroSearch, setRegistroSearch] = useState('');
   const [registroPage, setRegistroPage] = useState(1);
+  const [copiedPrompt, setCopiedPrompt] = useState(false);
 
   const fileInputRef = useRef(null);
 
@@ -795,6 +796,78 @@ export default function App() {
     return { criticas, atencao, dominadas };
   }, [matrizQuestoes]);
 
+  const iaPrompt = useMemo(() => {
+    if (!currentData) return '';
+    
+    const curso = currentData.curso || 'Curso Técnico';
+    const turma = currentData.turmaName || 'Turma Geral';
+    const escola = currentData.escola || 'SENAI';
+    const mediaTurma = currentData.desempenho;
+    const totalItens = currentData.totalItens;
+    const totalAlunos = currentData.respondentes;
+    
+    // Critical items (< 50% success rate)
+    const itensCriticos = matrizQuestoes.filter(q => q.taxa < 50);
+    const itensCriticosText = itensCriticos.length > 0 
+      ? itensCriticos.map(q => 
+          `- Item #${q.identificador} (${q.taxa.toFixed(1)}% de acertos):
+   • Conhecimento: ${q.conhecimento || 'Geral'}
+   • Capacidade: ${q.capacidade || 'Não especificada'}
+   • Subfunção: ${q.subfuncao || 'Não especificada'}
+   • Dificuldade: ${q.dificuldade || 'Média'}`
+        ).join('\n\n')
+      : 'Nenhum item crítico identificado (todas as questões tiveram taxa de acertos superior a 50%).';
+
+    // Mastered items (>= 70% success rate)
+    const itensDominados = matrizQuestoes.filter(q => q.taxa >= 70);
+    const itensDominadosText = itensDominados.length > 0
+      ? itensDominados.map(q => 
+          `- Item #${q.identificador} (${q.taxa.toFixed(1)}% de acertos): ${q.conhecimento || 'Geral'}`
+        ).join('\n')
+      : 'Nenhum item com taxa de acertos superior a 70%.';
+
+    // Students needing support (< 50% score)
+    const alunosCriticos = currentData.alunos.filter(a => a.desempenho < 50);
+    const alunosCriticosText = alunosCriticos.length > 0
+      ? alunosCriticos.map(a => `- ${a.nome} (${a.desempenho.toFixed(1)}% de aproveitamento - ${a.acertos} acertos de ${totalItens})`).join('\n')
+      : 'Nenhum estudante com aproveitamento inferior a 50%.';
+
+    return `Aja como um especialista em coordenação pedagógica, design educacional e tutor do SENAI.
+Fui encarregado de realizar uma intervenção pedagógica de revisão com base nos resultados obtidos por uma turma na avaliação oficial do SAEP (Sistema de Avaliação da Educação Profissional).
+
+Aqui estão os dados estruturados da avaliação para análise:
+
+### DADOS GERAIS DA TURMA
+- Escola: ${escola}
+- Curso/Área: ${curso}
+- Turma: ${turma}
+- Média de Aproveitamento Coletivo: ${mediaTurma}%
+- Total de Itens (Questões) Avaliados: ${totalItens}
+- Número de Estudantes Participantes: ${totalAlunos}
+
+### ITENS CRÍTICOS (Taxa de acerto inferior a 50%)
+Estes são os tópicos em que a turma apresentou maior dificuldade e necessita de revisão prioritária:
+${itensCriticosText}
+
+### ITENS DOMINADOS (Taxa de acerto superior a 70%)
+A turma demonstrou bom domínio nestes assuntos, exigindo menor tempo de intervenção:
+${itensDominadosText}
+
+### ESTUDANTES QUE NECESSITAM DE ATENÇÃO INDIVIDUAL (Aproveitamento inferior a 50%)
+Estes estudantes estão abaixo da média esperada e precisam de suporte ou reforço adaptado:
+${alunosCriticosText}
+
+---
+
+### SUA DIRETRIZ:
+Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógica extremamente prático e estruturado, contendo:
+
+1. **Priorização Pedagógica**: Identifique as principais lacunas conceituais comuns (cruzando os itens críticos com suas respectivas capacidades e conhecimentos) e explique por que a turma pode ter errado esses pontos.
+2. **Roteiro de Aula Prático (Recuperação)**: Crie uma sugestão de aula de revisão de 4 horas focada na superação dos itens críticos, utilizando metodologias ativas (como rotação por estações, aprendizagem baseada em problemas ou instrução pelos pares) alinhadas ao perfil do SENAI (foco prático e técnico).
+3. **Plano de Suporte Individualizado**: Sugira estratégias de recuperação contínua para os estudantes listados na seção de atenção individual, sem desacelerar o restante do cronograma da turma.
+4. **Questões de Fixação**: Crie 2 exemplos de questões conceituais inéditas no mesmo nível de complexidade das questões críticas para que eu possa aplicar em sala de aula como verificação de aprendizagem.`;
+  }, [currentData, matrizQuestoes]);
+
   const getClassificacaoTempo = (tempoStr, tempoMedioSeg) => {
     if (tempoMedioSeg === 0) return { label: 'Normal', colorClass: 'normal', isSlow: false, isFast: false };
     const partes = tempoStr.split(':');
@@ -932,6 +1005,17 @@ export default function App() {
                 <FileSpreadsheet size={18} />
               </div>
               <span className="sidebar-label">Registros e Itens</span>
+            </button>
+            
+            <button
+              onClick={() => setActiveSubTab('relatorio')}
+              className={`sidebar-item ${activeSubTab === 'relatorio' ? 'active' : ''}`}
+              title="Gerar Relatório para IA"
+            >
+              <div className="sidebar-icon">
+                <Sparkles size={18} style={{ color: 'var(--accent-orange)' }} />
+              </div>
+              <span className="sidebar-label" style={{ color: activeSubTab === 'relatorio' ? 'var(--accent-orange)' : 'inherit' }}>Relatório IA</span>
             </button>
           </div>
 
@@ -2005,6 +2089,137 @@ export default function App() {
                   </div>
                 )}
 
+                {activeSubTab === 'relatorio' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }} className="animate-fade-in">
+                    {/* Header Card */}
+                    <div className="glass-panel" style={{ padding: '2rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+                        <div style={{ background: 'var(--accent-orange-glow)', color: 'var(--accent-orange)', padding: '0.75rem', borderRadius: '12px', border: '1px solid var(--accent-orange-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Sparkles size={28} />
+                        </div>
+                        <div>
+                          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'white', margin: 0 }}>Relatório Pedagógico para IA</h2>
+                          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '0.25rem 0 0 0' }}>
+                            Gerador de prompts estruturados para você copiar e colar em IAs (Gemini, ChatGPT, Claude) criarem planos de revisão e roteiros pedagógicos personalizados.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* KPI Resumo do Relatório */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginTop: '1.5rem' }}>
+                        <div className="glass-panel kpi-card rose" style={{ padding: '1rem' }}>
+                          <div>
+                            <p className="kpi-label">Itens Críticos (&lt;50% acertos)</p>
+                            <h3 className="kpi-value" style={{ fontSize: '1.25rem' }}>{matrizQuestoes.filter(q => q.taxa < 50).length} itens</h3>
+                            <p className="kpi-sub">Inseridos para revisão prioritária</p>
+                          </div>
+                          <div className="kpi-icon-box" style={{ background: 'var(--accent-rose-glow)', color: 'var(--accent-rose)' }}>
+                            <XCircle size={16} />
+                          </div>
+                        </div>
+
+                        <div className="glass-panel kpi-card amber" style={{ padding: '1rem' }}>
+                          <div>
+                            <p className="kpi-label">Alunos sob Atenção (&lt;50% score)</p>
+                            <h3 className="kpi-value" style={{ fontSize: '1.25rem' }}>{currentData.alunos.filter(a => a.desempenho < 50).length} alunos</h3>
+                            <p className="kpi-sub">Foco de suporte individual</p>
+                          </div>
+                          <div className="kpi-icon-box" style={{ background: 'var(--accent-amber-glow)', color: 'var(--accent-amber)' }}>
+                            <Users size={16} />
+                          </div>
+                        </div>
+
+                        <div className="glass-panel kpi-card emerald" style={{ padding: '1rem' }}>
+                          <div>
+                            <p className="kpi-label">Assuntos Dominados (&gt;=70%)</p>
+                            <h3 className="kpi-value" style={{ fontSize: '1.25rem' }}>{matrizQuestoes.filter(q => q.taxa >= 70).length} itens</h3>
+                            <p className="kpi-sub">Consolidados pela turma</p>
+                          </div>
+                          <div className="kpi-icon-box" style={{ background: 'var(--accent-emerald-glow)', color: 'var(--accent-emerald)' }}>
+                            <CheckCircle2 size={16} />
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Prompt Action Area */}
+                      <div style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--accent-cyan)' }}></span>
+                            Conteúdo do Prompt
+                          </span>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(iaPrompt);
+                              setCopiedPrompt(true);
+                              setTimeout(() => setCopiedPrompt(false), 3000);
+                            }}
+                            className="btn-select"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.5rem', fontSize: '0.8rem', fontWeight: 'bold', background: copiedPrompt ? 'var(--accent-emerald)' : 'linear-gradient(135deg, var(--accent-orange), #ff8533)', boxShadow: copiedPrompt ? '0 0 20px var(--accent-emerald-glow)' : 'var(--shadow-glow-orange)' }}
+                          >
+                            {copiedPrompt ? (
+                              <>
+                                <CheckCircle2 size={16} /> Copiado com sucesso!
+                              </>
+                            ) : (
+                              <>
+                                <Sparkles size={16} /> Copiar Prompt para IA
+                              </>
+                            )}
+                          </button>
+                        </div>
+
+                        <div style={{ position: 'relative' }}>
+                          <textarea
+                            value={iaPrompt}
+                            readOnly
+                            style={{
+                              width: '100%',
+                              height: '350px',
+                              background: 'rgba(0, 0, 0, 0.45)',
+                              border: '1px solid var(--border-color)',
+                              borderRadius: 'var(--radius-sm)',
+                              color: 'var(--text-secondary)',
+                              fontFamily: 'monospace',
+                              fontSize: '0.75rem',
+                              padding: '1.25rem',
+                              resize: 'none',
+                              outline: 'none',
+                              lineHeight: '1.5'
+                            }}
+                          />
+                          <div style={{ position: 'absolute', bottom: '1.5rem', right: '1.5rem', display: 'flex', gap: '0.5rem' }}>
+                            <span style={{ fontSize: '0.65rem', background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)', padding: '0.3rem 0.6rem', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                              {iaPrompt.length} caracteres
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* How to use guidelines */}
+                    <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'white', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+                        <Target size={16} style={{ color: 'var(--accent-orange)' }} />
+                        Como utilizar com a Inteligência Artificial?
+                      </h3>
+                      <ol style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', paddingLeft: '1.25rem', margin: 0, lineHeight: '1.6', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        <li>
+                          Clique no botão <strong>"Copiar Prompt para IA"</strong> para salvar o texto estruturado com os dados pedagógicos reais da sua turma.
+                        </li>
+                        <li>
+                          Acesse um chat de Inteligência Artificial de sua preferência (exemplos: <a href="https://gemini.google.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-cyan)', textDecoration: 'underline' }}>Google Gemini</a>, <a href="https://chatgpt.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-cyan)', textDecoration: 'underline' }}>OpenAI ChatGPT</a> ou Claude).
+                        </li>
+                        <li>
+                          Cole o prompt copiado no campo de digitação e envie.
+                        </li>
+                        <li>
+                          A IA agirá como consultor pedagógico e retornará um roteiro completo de intervenção focado estritamente nas capacidades e conhecimentos em defasagem da sua turma de <strong>{currentData.curso}</strong>.
+                        </li>
+                      </ol>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
