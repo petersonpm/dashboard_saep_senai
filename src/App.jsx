@@ -1099,13 +1099,7 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
         <div className="glass-panel" style={{ width: '100%', maxWidth: '420px', padding: '2.5rem', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.06)' }}>
           
           <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-            <div className="senai-logo-container" style={{ margin: '0 auto 1rem', display: 'flex', justifyContent: 'center' }}>
-              <span>SENA</span>
-              <span className="logo-letter-i">
-                <span className="i-top"></span>
-                <span className="i-bottom"></span>
-              </span>
-            </div>
+            <img src="/senai-logo.png" alt="SENAI Logo" style={{ height: '36px', margin: '0 auto 1rem', display: 'block' }} />
             <h2 style={{ fontSize: '1.4rem', color: 'white', fontWeight: '800', fontFamily: 'Outfit' }}>Portal de Acompanhamento SAEP</h2>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.35rem' }}>
               {isSignUpMode ? 'Crie sua conta para salvar suas turmas na nuvem' : 'Entre para acessar suas planilhas de qualquer lugar'}
@@ -1219,8 +1213,8 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
         <aside className="sidebar">
           <div className="sidebar-header-wrapper">
             <div className="sidebar-brand">
-              <div className="senai-logo-container-small">
-                <span className="logo-s">S</span>
+              <div className="senai-logo-container-small" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <img src="/favicon.png" alt="S" style={{ width: '28px', height: '28px', borderRadius: '6px' }} />
               </div>
               <div className="sidebar-brand-text">
                 <span className="saep-portal-prefix-small">Portal</span>
@@ -1300,13 +1294,7 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
         <header className="header">
         <div className="container header-content">
           <div className="header-brand">
-            <div className="senai-logo-container">
-              <span>SENA</span>
-              <span className="logo-letter-i">
-                <span className="i-top"></span>
-                <span className="i-bottom"></span>
-              </span>
-            </div>
+            <img src="/senai-logo.png" alt="SENAI Logo" style={{ height: '30px', display: 'block' }} />
             
             <div className="header-divider"></div>
             
