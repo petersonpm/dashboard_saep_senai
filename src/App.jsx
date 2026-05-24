@@ -1,5 +1,6 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
+import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { 
   UploadCloud, 
   Award, 
@@ -22,7 +23,9 @@ import {
   Trophy,
   ArrowRight,
   Download,
-  AlertCircle
+  AlertCircle,
+  RefreshCw,
+  Settings
 } from 'lucide-react';
 import {
   BarChart,
@@ -54,6 +57,121 @@ export default function App() {
   const [registroSearch, setRegistroSearch] = useState('');
   const [registroPage, setRegistroPage] = useState(1);
   const [copiedPrompt, setCopiedPrompt] = useState(false);
+
+  // Supabase Authentication & Cloud States
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authError, setAuthError] = useState(null);
+  const [isSignUpMode, setIsSignUpMode] = useState(false);
+  const [isSavingToCloud, setIsSavingToCloud] = useState(false);
+
+  // Auto-sync on startup if valid credentials exist
+  useEffect(() => {
+    // Obter sessão inicial e monitorar mudanças de autenticação
+    if (isSupabaseConfigured) {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        setSession(session);
+        setAuthLoading(false);
+        if (session?.user) {
+          loadUserTurmas(session.user.id);
+        }
+      });
+
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        setSession(session);
+        if (session?.user) {
+          loadUserTurmas(session.user.id);
+        } else {
+          setTurmas({});
+          setSelectedTurma(null);
+        }
+        setAuthLoading(false);
+      });
+
+      return () => subscription.unsubscribe();
+    } else {
+      setAuthLoading(false);
+    }
+  }, []);
+
+  const loadUserTurmas = async (userId) => {
+    if (!isSupabaseConfigured) return;
+    try {
+      const { data, error } = await supabase
+        .from('turmas')
+        .select('*')
+        .order('created_at', { ascending: true });
+      
+      if (error) throw error;
+      
+      const loadedTurmas = {};
+      data.forEach(row => {
+        loadedTurmas[row.nome_key] = {
+          ...row.dados,
+          id_db: row.id
+        };
+      });
+      setTurmas(loadedTurmas);
+      
+      const keys = Object.keys(loadedTurmas);
+      if (keys.length > 0) {
+        setSelectedTurma(keys[keys.length - 1]);
+        setSelectedAlunoMatricula(loadedTurmas[keys[keys.length - 1]]?.alunos[0]?.matricula || null);
+      }
+    } catch (err) {
+      console.error("Erro ao carregar turmas:", err.message);
+    }
+  };
+
+  const saveTurmaToSupabase = async (nomeKey, dados) => {
+    if (!isSupabaseConfigured) return;
+    setIsSavingToCloud(true);
+    try {
+      // Obter usuário atual
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('turmas')
+        .insert([{
+          user_id: user.id,
+          nome_key: nomeKey,
+          dados: dados
+        }])
+        .select();
+      
+      if (error) throw error;
+      
+      if (data && data[0]) {
+        setTurmas(prev => ({
+          ...prev,
+          [nomeKey]: { ...dados, id_db: data[0].id }
+        }));
+      }
+    } catch (err) {
+      console.error("Erro ao salvar no Supabase:", err.message);
+    } finally {
+      setIsSavingToCloud(false);
+    }
+  };
+
+  const deleteTurmaFromSupabase = async (nomeKey) => {
+    const target = turmas[nomeKey];
+    if (!target) return;
+    
+    if (isSupabaseConfigured && target.id_db) {
+      try {
+        const { error } = await supabase
+          .from('turmas')
+          .delete()
+          .eq('id', target.id_db);
+        
+        if (error) throw error;
+      } catch (err) {
+        console.error("Erro ao excluir do Supabase:", err.message);
+      }
+    }
+  };
 
   const fileInputRef = useRef(null);
 
@@ -94,15 +212,29 @@ export default function App() {
       const nomeSemExt = file.name.replace(/\.xlsx?$/, '');
       const dados = await lerPlanilha(file);
       novasTurmas[nomeSemExt] = dados;
+      
+      if (isSupabaseConfigured && session?.user) {
+        await saveTurmaToSupabase(nomeSemExt, dados);
+      }
     }
 
-    setTurmas(novasTurmas);
-    const keys = Object.keys(novasTurmas);
-    if (keys.length > 0) {
-      const ultimaTurma = keys[keys.length - 1];
-      setSelectedTurma(ultimaTurma); // Select latest loaded
-      const primeiroAluno = novasTurmas[ultimaTurma]?.alunos[0]?.matricula || null;
-      setSelectedAlunoMatricula(primeiroAluno);
+    if (!isSupabaseConfigured || !session?.user) {
+      setTurmas(novasTurmas);
+      const keys = Object.keys(novasTurmas);
+      if (keys.length > 0) {
+        const ultimaTurma = keys[keys.length - 1];
+        setSelectedTurma(ultimaTurma); // Select latest loaded
+        const primeiroAluno = novasTurmas[ultimaTurma]?.alunos[0]?.matricula || null;
+        setSelectedAlunoMatricula(primeiroAluno);
+      }
+    } else {
+      const keys = Object.keys(novasTurmas);
+      if (keys.length > 0) {
+        const ultimaTurma = keys[keys.length - 1];
+        setSelectedTurma(ultimaTurma);
+        const primeiroAluno = novasTurmas[ultimaTurma]?.alunos[0]?.matricula || null;
+        setSelectedAlunoMatricula(primeiroAluno);
+      }
     }
   };
 
@@ -890,8 +1022,9 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
     return 'insuficiente';
   };
 
-  const removerTurma = (nomeKey, e) => {
+  const removerTurma = async (nomeKey, e) => {
     e.stopPropagation();
+    await deleteTurmaFromSupabase(nomeKey);
     const novasTurmas = { ...turmas };
     delete novasTurmas[nomeKey];
     setTurmas(novasTurmas);
@@ -950,6 +1083,134 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
     link.click();
     document.body.removeChild(link);
   };
+
+  if (isSupabaseConfigured && authLoading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg-primary)', color: 'white' }}>
+        <RefreshCw className="animate-spin" size={40} style={{ color: 'var(--accent-orange)' }} />
+        <p style={{ marginTop: '1rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Carregando sessão...</p>
+      </div>
+    );
+  }
+
+  if (isSupabaseConfigured && !session) {
+    return (
+      <div className="app-container" style={{ justifyContent: 'center', alignItems: 'center', height: '100vh', background: 'radial-gradient(circle at top right, rgba(235, 87, 36, 0.08), transparent 40%), radial-gradient(circle at bottom left, rgba(6, 182, 212, 0.08), transparent 40%), var(--bg-primary)' }}>
+        <div className="glass-panel" style={{ width: '100%', maxWidth: '420px', padding: '2.5rem', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.06)' }}>
+          
+          <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+            <div className="senai-logo-container" style={{ margin: '0 auto 1rem', display: 'flex', justifyContent: 'center' }}>
+              <span>SENA</span>
+              <span className="logo-letter-i">
+                <span className="i-top"></span>
+                <span className="i-bottom"></span>
+              </span>
+            </div>
+            <h2 style={{ fontSize: '1.4rem', color: 'white', fontWeight: '800', fontFamily: 'Outfit' }}>Portal de Acompanhamento SAEP</h2>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.35rem' }}>
+              {isSignUpMode ? 'Crie sua conta para salvar suas turmas na nuvem' : 'Entre para acessar suas planilhas de qualquer lugar'}
+            </p>
+          </div>
+
+          {authError && (
+            <div style={{ padding: '0.75rem', background: 'rgba(244, 63, 94, 0.08)', borderRadius: '8px', border: '1px solid rgba(244, 63, 94, 0.2)', fontSize: '0.75rem', color: 'var(--accent-rose)', marginBottom: '1.25rem' }}>
+              {authError}
+            </div>
+          )}
+
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            setAuthError(null);
+            const email = e.target.email.value;
+            const password = e.target.password.value;
+            
+            if (isSignUpMode) {
+              const { error } = await supabase.auth.signUp({ email, password });
+              if (error) {
+                setAuthError(error.message);
+              } else {
+                setAuthError("Cadastro realizado! Verifique seu e-mail para confirmar a conta ou tente fazer o login.");
+                setIsSignUpMode(false);
+              }
+            } else {
+              const { error } = await supabase.auth.signInWithPassword({ email, password });
+              if (error) {
+                setAuthError(error.message);
+              }
+            }
+          }} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 'bold', marginBottom: '0.35rem' }}>
+                E-mail
+              </label>
+              <input
+                name="email"
+                type="email"
+                required
+                placeholder="professor@senai.com.br"
+                style={{ width: '100%', padding: '0.7rem', background: 'var(--bg-input)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', color: 'white', fontSize: '0.8rem', outline: 'none' }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 'bold', marginBottom: '0.35rem' }}>
+                Senha
+              </label>
+              <input
+                name="password"
+                type="password"
+                required
+                placeholder="******"
+                style={{ width: '100%', padding: '0.7rem', background: 'var(--bg-input)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', color: 'white', fontSize: '0.8rem', outline: 'none' }}
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="btn-select"
+              style={{ width: '100%', justifyContent: 'center', padding: '0.8rem', fontSize: '0.85rem', fontWeight: 'bold', background: 'linear-gradient(135deg, var(--accent-orange), #ff8533)', boxShadow: 'var(--shadow-glow-orange)', marginTop: '0.5rem' }}
+            >
+              {isSignUpMode ? 'Criar Conta' : 'Entrar no Portal'}
+            </button>
+          </form>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1.5rem' }}>
+            <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.65rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              — OU —
+            </div>
+            
+            <button
+              type="button"
+              onClick={async () => {
+                setAuthError(null);
+                const { error } = await supabase.auth.signInAnonymously();
+                if (error) {
+                  setAuthError(error.message);
+                }
+              }}
+              className="btn-help"
+              style={{ width: '100%', justifyContent: 'center', gap: '0.5rem', background: 'rgba(255, 255, 255, 0.03)', borderColor: 'var(--border-color)', padding: '0.8rem', fontSize: '0.8rem', fontWeight: 'bold', color: 'white', cursor: 'pointer' }}
+            >
+              <Sparkles size={16} style={{ color: 'var(--accent-orange)' }} />
+              Entrar como Convidado (Rápido)
+            </button>
+          </div>
+
+          <div style={{ textAlign: 'center', marginTop: '1.5rem', fontSize: '0.75rem' }}>
+            <button
+              onClick={() => {
+                setAuthError(null);
+                setIsSignUpMode(!isSignUpMode);
+              }}
+              style={{ background: 'transparent', border: 'none', color: 'var(--accent-cyan)', cursor: 'pointer', textDecoration: 'underline' }}
+            >
+              {isSignUpMode ? 'Já tenho uma conta. Fazer Login.' : 'Não tem conta? Crie uma aqui.'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="app-container">
@@ -1055,7 +1316,33 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
             </div>
           </div>
           
-          <div className="header-actions">
+          <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            {isSupabaseConfigured && session && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', paddingRight: '0.75rem', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--accent-emerald)', display: 'inline-block' }}></span>
+                  {session.user.is_anonymous ? 'Modo Convidado' : session.user.email}
+                </span>
+                
+                <button
+                  onClick={async () => {
+                    await supabase.auth.signOut();
+                  }}
+                  className="btn-clear"
+                  style={{ padding: '0.35rem 0.6rem', fontSize: '0.7rem', color: 'var(--accent-rose)', border: 'none', background: 'transparent', cursor: 'pointer', fontWeight: 'bold' }}
+                  title="Sair da Conta"
+                >
+                  Sair
+                </button>
+              </div>
+            )}
+
+            {!isSupabaseConfigured && (
+              <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', background: 'rgba(255, 255, 255, 0.02)', padding: '0.25rem 0.5rem', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
+                Modo Local (Sem Nuvem)
+              </span>
+            )}
+
             <button 
               onClick={() => setShowHelpModal(true)}
               className="btn-help"
@@ -1066,7 +1353,7 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
             
             {currentData && (
               <span className="process-time">
-                Sincronizado: {currentData.dataProcessamento}
+                Atualizado: {currentData.dataProcessamento}
               </span>
             )}
           </div>
@@ -1115,6 +1402,13 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
                 Selecionar Arquivos <ArrowRight size={14} />
               </button>
             </div>
+
+            {isSupabaseConfigured && session && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', marginTop: '1.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                <CheckCircle2 size={12} style={{ color: 'var(--accent-emerald)' }} />
+                Sincronização na nuvem ativa. Suas planilhas serão salvas automaticamente.
+              </div>
+            )}
             
             <p className="upload-footer-text">
               Processamento 100% em sand-box local. Seus dados permanecem seguros em seu navegador.
@@ -2292,6 +2586,7 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
           </div>
         </div>
       )}
+
     </div>
   );
 }
