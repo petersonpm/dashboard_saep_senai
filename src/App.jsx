@@ -1099,7 +1099,11 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
         <div className="glass-panel" style={{ width: '100%', maxWidth: '420px', padding: '2.5rem', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.06)' }}>
           
           <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-            <img src="/senai-logo.png" alt="SENAI Logo" style={{ height: '36px', margin: '0 auto 1rem', display: 'block' }} />
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.25rem' }}>
+              <div style={{ background: '#ffffff', padding: '6px 16px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+                <img src="/senai-logo.png" alt="SENAI Logo" style={{ height: '24px', display: 'block' }} />
+              </div>
+            </div>
             <h2 style={{ fontSize: '1.4rem', color: 'white', fontWeight: '800', fontFamily: 'Outfit' }}>Portal de Acompanhamento SAEP</h2>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.35rem' }}>
               {isSignUpMode ? 'Crie sua conta para salvar suas turmas na nuvem' : 'Entre para acessar suas planilhas de qualquer lugar'}
@@ -1294,7 +1298,9 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
         <header className="header">
         <div className="container header-content">
           <div className="header-brand">
-            <img src="/senai-logo.png" alt="SENAI Logo" style={{ height: '30px', display: 'block' }} />
+            <div style={{ background: '#ffffff', padding: '5px 12px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+              <img src="/senai-logo.png" alt="SENAI Logo" style={{ height: '20px', display: 'block' }} />
+            </div>
             
             <div className="header-divider"></div>
             
