@@ -63,12 +63,23 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState(null);
   const [isSignUpMode, setIsSignUpMode] = useState(false);
+  const [isResetPasswordMode, setIsResetPasswordMode] = useState(false);
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
   const [isSavingToCloud, setIsSavingToCloud] = useState(false);
 
   // Auto-sync on startup if valid credentials exist
   useEffect(() => {
     // Obter sessão inicial e monitorar mudanças de autenticação
     if (isSupabaseConfigured) {
+      // Verificar se a URL contém tokens de recuperação de senha do Supabase
+      if (window.location.hash && (window.location.hash.includes('type=recovery') || window.location.hash.includes('access_token='))) {
+        setIsUpdatingPassword(true);
+        // Esperar um curto período para o SDK do Supabase ler os tokens da URL e então limpar o endereço
+        setTimeout(() => {
+          window.history.replaceState(null, null, ' ');
+        }, 500);
+      }
+
       supabase.auth.getSession().then(({ data: { session } }) => {
         setSession(session);
         setAuthLoading(false);
@@ -77,8 +88,11 @@ export default function App() {
         }
       });
 
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
         setSession(session);
+        if (event === 'PASSWORD_RECOVERY') {
+          setIsUpdatingPassword(true);
+        }
         if (session?.user) {
           loadUserTurmas(session.user.id);
         } else {
@@ -1093,16 +1107,51 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
     );
   }
 
-  if (isSupabaseConfigured && !session) {
+  if (isSupabaseConfigured && (!session || isUpdatingPassword)) {
     return (
-      <div className="app-container" style={{ justifyContent: 'center', alignItems: 'center', height: '100vh', background: 'radial-gradient(circle at top right, rgba(235, 87, 36, 0.08), transparent 40%), radial-gradient(circle at bottom left, rgba(6, 182, 212, 0.08), transparent 40%), var(--bg-primary)' }}>
-        <div className="glass-panel" style={{ width: '100%', maxWidth: '420px', padding: '2.5rem', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.06)' }}>
+      <div className="app-container" style={{ 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh', 
+        background: isSignUpMode
+          ? 'radial-gradient(circle at top right, rgba(6, 182, 212, 0.08), transparent 40%), radial-gradient(circle at bottom left, rgba(6, 182, 212, 0.08), transparent 40%), var(--bg-primary)'
+          : 'radial-gradient(circle at top right, rgba(235, 87, 36, 0.08), transparent 40%), radial-gradient(circle at bottom left, rgba(6, 182, 212, 0.08), transparent 40%), var(--bg-primary)',
+        transition: 'background 0.5s ease'
+      }}>
+        <div className="glass-panel" style={{ 
+          width: '100%', 
+          maxWidth: '420px', 
+          padding: '2.5rem', 
+          borderRadius: '16px', 
+          boxShadow: isSignUpMode
+            ? '0 20px 40px rgba(0,0,0,0.45), 0 0 35px rgba(6, 182, 212, 0.08)'
+            : '0 20px 40px rgba(0,0,0,0.4), 0 0 30px rgba(235, 87, 36, 0.05)', 
+          border: isSignUpMode
+            ? '1px solid rgba(6, 182, 212, 0.2)'
+            : '1px solid rgba(255,255,255,0.06)',
+          transition: 'all 0.5s ease'
+        }}>
           
           <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
             <img src="/senai-logo.png" alt="SENAI Logo" style={{ height: '36px', margin: '0 auto 1.25rem', display: 'block' }} />
-            <h2 style={{ fontSize: '1.4rem', color: 'white', fontWeight: '800', fontFamily: 'Outfit' }}>Portal de Acompanhamento SAEP</h2>
+            
+            {isSignUpMode && (
+              <div style={{ display: 'inline-block', background: 'rgba(6, 182, 212, 0.1)', border: '1px solid rgba(6, 182, 212, 0.25)', color: 'var(--accent-cyan)', fontSize: '0.65rem', fontWeight: 'bold', textTransform: 'uppercase', padding: '0.25rem 0.75rem', borderRadius: '50px', marginBottom: '0.75rem', letterSpacing: '0.05em' }}>
+                Criar Nova Conta
+              </div>
+            )}
+
+            <h2 style={{ fontSize: '1.4rem', color: 'white', fontWeight: '800', fontFamily: 'Outfit' }}>
+              {isUpdatingPassword ? 'Definir Nova Senha' : isResetPasswordMode ? 'Recuperar Senha' : 'Portal de Acompanhamento SAEP'}
+            </h2>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.35rem' }}>
-              {isSignUpMode ? 'Crie sua conta para salvar suas turmas na nuvem' : 'Entre para acessar suas planilhas de qualquer lugar'}
+              {isUpdatingPassword 
+                ? 'Digite sua nova senha de acesso abaixo.' 
+                : isResetPasswordMode 
+                  ? 'Insira seu e-mail para receber as instruções de recuperação.' 
+                  : isSignUpMode 
+                    ? 'Preencha os campos abaixo para criar seu cadastro.' 
+                    : 'Entre para acessar suas planilhas de qualquer lugar'}
             </p>
           </div>
 
@@ -1115,10 +1164,52 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
           <form onSubmit={async (e) => {
             e.preventDefault();
             setAuthError(null);
-            const email = e.target.email.value;
-            const password = e.target.password.value;
+            
+            const formData = new FormData(e.currentTarget);
+            
+            if (isUpdatingPassword) {
+              const password = formData.get('newPassword');
+              const confirmPassword = formData.get('confirmPassword');
+              
+              if (password !== confirmPassword) {
+                setAuthError("As senhas não coincidem.");
+                return;
+              }
+              
+              const { error } = await supabase.auth.updateUser({ password });
+              if (error) {
+                setAuthError(error.message);
+              } else {
+                setAuthError("Sua senha foi atualizada com sucesso! Você já está logado.");
+                setIsUpdatingPassword(false);
+              }
+              return;
+            }
+
+            const email = formData.get('email');
+
+            if (isResetPasswordMode) {
+              const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                redirectTo: window.location.origin,
+              });
+              if (error) {
+                setAuthError(error.message);
+              } else {
+                setAuthError("E-mail de recuperação enviado! Verifique sua caixa de entrada.");
+                setIsResetPasswordMode(false);
+              }
+              return;
+            }
+
+            const password = formData.get('password');
             
             if (isSignUpMode) {
+              const confirmPassword = formData.get('confirmPassword');
+              if (password !== confirmPassword) {
+                setAuthError("As senhas não coincidem.");
+                return;
+              }
+              
               const { error } = await supabase.auth.signUp({ email, password });
               if (error) {
                 setAuthError(error.message);
@@ -1133,74 +1224,205 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
               }
             }
           }} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 'bold', marginBottom: '0.35rem' }}>
-                E-mail
-              </label>
-              <input
-                name="email"
-                type="email"
-                required
-                placeholder="professor@senai.com.br"
-                style={{ width: '100%', padding: '0.7rem', background: 'var(--bg-input)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', color: 'white', fontSize: '0.8rem', outline: 'none' }}
-              />
-            </div>
+            {isUpdatingPassword ? (
+              <>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 'bold', marginBottom: '0.35rem' }}>
+                    Nova Senha
+                  </label>
+                  <input
+                    name="newPassword"
+                    type="password"
+                    required
+                    placeholder="******"
+                    style={{ width: '100%', padding: '0.7rem', background: 'var(--bg-input)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', color: 'white', fontSize: '0.8rem', outline: 'none' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 'bold', marginBottom: '0.35rem' }}>
+                    Confirmar Nova Senha
+                  </label>
+                  <input
+                    name="confirmPassword"
+                    type="password"
+                    required
+                    placeholder="******"
+                    style={{ width: '100%', padding: '0.7rem', background: 'var(--bg-input)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', color: 'white', fontSize: '0.8rem', outline: 'none' }}
+                  />
+                </div>
+              </>
+            ) : isResetPasswordMode ? (
+              <div>
+                <label style={{ display: 'block', fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 'bold', marginBottom: '0.35rem' }}>
+                  E-mail
+                </label>
+                <input
+                  name="email"
+                  type="email"
+                  required
+                  placeholder="professor@senai.com.br"
+                  style={{ width: '100%', padding: '0.7rem', background: 'var(--bg-input)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', color: 'white', fontSize: '0.8rem', outline: 'none' }}
+                />
+              </div>
+            ) : isSignUpMode ? (
+              <>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 'bold', marginBottom: '0.35rem' }}>
+                    E-mail
+                  </label>
+                  <input
+                    name="email"
+                    type="email"
+                    required
+                    placeholder="professor@senai.com.br"
+                    style={{ width: '100%', padding: '0.7rem', background: 'var(--bg-input)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', color: 'white', fontSize: '0.8rem', outline: 'none' }}
+                  />
+                </div>
 
-            <div>
-              <label style={{ display: 'block', fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 'bold', marginBottom: '0.35rem' }}>
-                Senha
-              </label>
-              <input
-                name="password"
-                type="password"
-                required
-                placeholder="******"
-                style={{ width: '100%', padding: '0.7rem', background: 'var(--bg-input)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', color: 'white', fontSize: '0.8rem', outline: 'none' }}
-              />
-            </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 'bold', marginBottom: '0.35rem' }}>
+                    Senha
+                  </label>
+                  <input
+                    name="password"
+                    type="password"
+                    required
+                    placeholder="******"
+                    style={{ width: '100%', padding: '0.7rem', background: 'var(--bg-input)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', color: 'white', fontSize: '0.8rem', outline: 'none' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 'bold', marginBottom: '0.35rem' }}>
+                    Confirmar Senha
+                  </label>
+                  <input
+                    name="confirmPassword"
+                    type="password"
+                    required
+                    placeholder="******"
+                    style={{ width: '100%', padding: '0.7rem', background: 'var(--bg-input)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', color: 'white', fontSize: '0.8rem', outline: 'none' }}
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 'bold', marginBottom: '0.35rem' }}>
+                    E-mail
+                  </label>
+                  <input
+                    name="email"
+                    type="email"
+                    required
+                    placeholder="professor@senai.com.br"
+                    style={{ width: '100%', padding: '0.7rem', background: 'var(--bg-input)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', color: 'white', fontSize: '0.8rem', outline: 'none' }}
+                  />
+                </div>
+
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                    <label style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 'bold' }}>
+                      Senha
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthError(null);
+                        setIsResetPasswordMode(true);
+                      }}
+                      style={{ background: 'transparent', border: 'none', color: 'var(--accent-cyan)', fontSize: '0.7rem', cursor: 'pointer', textDecoration: 'none', padding: 0 }}
+                    >
+                      Esqueci a senha?
+                    </button>
+                  </div>
+                  <input
+                    name="password"
+                    type="password"
+                    required
+                    placeholder="******"
+                    style={{ width: '100%', padding: '0.7rem', background: 'var(--bg-input)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', color: 'white', fontSize: '0.8rem', outline: 'none' }}
+                  />
+                </div>
+              </>
+            )}
 
             <button
               type="submit"
               className="btn-select"
-              style={{ width: '100%', justifyContent: 'center', padding: '0.8rem', fontSize: '0.85rem', fontWeight: 'bold', background: 'linear-gradient(135deg, var(--accent-orange), #ff8533)', boxShadow: 'var(--shadow-glow-orange)', marginTop: '0.5rem' }}
+              style={{ 
+                width: '100%', 
+                justifyContent: 'center', 
+                padding: '0.8rem', 
+                fontSize: '0.85rem', 
+                fontWeight: 'bold', 
+                background: isSignUpMode
+                  ? 'linear-gradient(135deg, var(--accent-cyan), #0099cc)'
+                  : 'linear-gradient(135deg, var(--accent-orange), #ff8533)', 
+                boxShadow: isSignUpMode
+                  ? '0 0 15px rgba(6, 182, 212, 0.3)'
+                  : 'var(--shadow-glow-orange)', 
+                marginTop: '0.5rem',
+                border: 'none',
+                color: 'white',
+                cursor: 'pointer',
+                transition: 'all 0.3s ease'
+              }}
             >
-              {isSignUpMode ? 'Criar Conta' : 'Entrar no Portal'}
+              {isUpdatingPassword ? 'Atualizar Senha' : isResetPasswordMode ? 'Enviar Instruções' : isSignUpMode ? 'Criar Conta' : 'Entrar no Portal'}
             </button>
           </form>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1.5rem' }}>
-            <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.65rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              — OU —
+          {isResetPasswordMode || isUpdatingPassword ? (
+            <div style={{ textAlign: 'center', marginTop: '1.5rem', fontSize: '0.75rem' }}>
+              <button
+                onClick={() => {
+                  setAuthError(null);
+                  setIsResetPasswordMode(false);
+                  setIsUpdatingPassword(false);
+                }}
+                style={{ background: 'transparent', border: 'none', color: 'var(--accent-cyan)', cursor: 'pointer', textDecoration: 'underline' }}
+              >
+                Voltar para o Login
+              </button>
             </div>
-            
-            <button
-              type="button"
-              onClick={async () => {
-                setAuthError(null);
-                const { error } = await supabase.auth.signInAnonymously();
-                if (error) {
-                  setAuthError(error.message);
-                }
-              }}
-              className="btn-help"
-              style={{ width: '100%', justifyContent: 'center', gap: '0.5rem', background: 'rgba(255, 255, 255, 0.03)', borderColor: 'var(--border-color)', padding: '0.8rem', fontSize: '0.8rem', fontWeight: 'bold', color: 'white', cursor: 'pointer' }}
-            >
-              <Sparkles size={16} style={{ color: 'var(--accent-orange)' }} />
-              Entrar como Convidado (Rápido)
-            </button>
-          </div>
+          ) : (
+            <>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1.5rem' }}>
+                <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.65rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  — OU —
+                </div>
+                
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setAuthError(null);
+                    const { error } = await supabase.auth.signInAnonymously();
+                    if (error) {
+                      setAuthError(error.message);
+                    }
+                  }}
+                  className="btn-help"
+                  style={{ width: '100%', justifyContent: 'center', gap: '0.5rem', background: 'rgba(255, 255, 255, 0.03)', borderColor: 'var(--border-color)', padding: '0.8rem', fontSize: '0.8rem', fontWeight: 'bold', color: 'white', cursor: 'pointer' }}
+                >
+                  <Sparkles size={16} style={{ color: 'var(--accent-orange)' }} />
+                  Entrar como Convidado (Rápido)
+                </button>
+              </div>
 
-          <div style={{ textAlign: 'center', marginTop: '1.5rem', fontSize: '0.75rem' }}>
-            <button
-              onClick={() => {
-                setAuthError(null);
-                setIsSignUpMode(!isSignUpMode);
-              }}
-              style={{ background: 'transparent', border: 'none', color: 'var(--accent-cyan)', cursor: 'pointer', textDecoration: 'underline' }}
-            >
-              {isSignUpMode ? 'Já tenho uma conta. Fazer Login.' : 'Não tem conta? Crie uma aqui.'}
-            </button>
-          </div>
+              <div style={{ textAlign: 'center', marginTop: '1.5rem', fontSize: '0.75rem' }}>
+                <button
+                  onClick={() => {
+                    setAuthError(null);
+                    setIsSignUpMode(!isSignUpMode);
+                  }}
+                  style={{ background: 'transparent', border: 'none', color: 'var(--accent-cyan)', cursor: 'pointer', textDecoration: 'underline' }}
+                >
+                  {isSignUpMode ? 'Já tenho uma conta. Fazer Login.' : 'Não tem conta? Crie uma aqui.'}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     );
