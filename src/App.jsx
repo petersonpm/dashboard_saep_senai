@@ -1701,109 +1701,6 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
                 {activeSubTab === 'resumo' && statsCalculated && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                     
-                    {/* Key Indicators Grid */}
-                    <div className="kpi-grid">
-                      {/* KPI 1 */}
-                      <div className="glass-panel kpi-card cyan">
-                        <div>
-                          <p className="kpi-label">Desempenho Médio</p>
-                          <h3 className="kpi-value">{currentData.desempenho.toFixed(2)}%</h3>
-                          <p className="kpi-sub">Média geral da turma</p>
-                        </div>
-                        <div className="kpi-icon-box">
-                          <Percent size={18} />
-                        </div>
-                      </div>
-
-                      {/* KPI 2 */}
-                      <div className="glass-panel kpi-card emerald">
-                        <div>
-                          <p className="kpi-label">Acertos Médios</p>
-                          <h3 className="kpi-value">{currentData.acertosMedio.toFixed(2)}</h3>
-                          <p className="kpi-sub">de {currentData.totalItens} itens avaliados</p>
-                        </div>
-                        <div className="kpi-icon-box">
-                          <CheckCircle2 size={18} />
-                        </div>
-                      </div>
-
-                      {/* KPI 3 */}
-                      <div className="glass-panel kpi-card rose">
-                        <div>
-                          <p className="kpi-label">Erros Médios</p>
-                          <h3 className="kpi-value">{currentData.errosMedio.toFixed(2)}</h3>
-                          <p className="kpi-sub">de {currentData.totalItens} itens avaliados</p>
-                        </div>
-                        <div className="kpi-icon-box">
-                          <XCircle size={18} />
-                        </div>
-                      </div>
-
-                      {/* KPI 4 */}
-                      <div className="glass-panel kpi-card violet">
-                        <div>
-                          <p className="kpi-label">Avaliados</p>
-                          <h3 className="kpi-value">{currentData.respondentes}</h3>
-                          <p className="kpi-sub">Alunos respondentes</p>
-                        </div>
-                        <div className="kpi-icon-box">
-                          <Users size={18} />
-                        </div>
-                      </div>
-
-                      {/* KPI 5 */}
-                      <div className="glass-panel kpi-card slate">
-                        <div>
-                          <p className="kpi-label">Tempo Médio</p>
-                          <h3 className="kpi-value" style={{ color: '#e2e8f0' }}>{statsCalculated.tempoMedioStr}</h3>
-                          <p className="kpi-sub">Tempo médio de realização</p>
-                        </div>
-                        <div className="kpi-icon-box">
-                          <Clock size={18} />
-                        </div>
-                      </div>
-
-                      {/* KPI 6 */}
-                      <div className="glass-panel kpi-card amber">
-                        <div>
-                          <p className="kpi-label">Melhor Nota</p>
-                          <h3 className="kpi-value" style={{ fontSize: '1.25rem' }} title={statsCalculated.melhorAluno?.nome}>
-                            {statsCalculated.melhorAluno?.desempenho.toFixed(1)}%
-                          </h3>
-                          <p className="kpi-sub" style={{ textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden', maxWidth: '140px' }}>
-                            {statsCalculated.melhorAluno?.nome}
-                          </p>
-                        </div>
-                        <div className="kpi-icon-box">
-                          <Award size={18} />
-                        </div>
-                      </div>
-
-                      {/* KPI 7 */}
-                      <div className="glass-panel kpi-card cyan">
-                        <div>
-                          <p className="kpi-label">Acima da Média</p>
-                          <h3 className="kpi-value" style={{ color: '#a5f3fc' }}>{statsCalculated.alunosAcimaMedia}</h3>
-                          <p className="kpi-sub">{Math.round((statsCalculated.alunosAcimaMedia / currentData.respondentes) * 100)}% da turma</p>
-                        </div>
-                        <div className="kpi-icon-box">
-                          <TrendingUp size={18} />
-                        </div>
-                      </div>
-
-                      {/* KPI 8 */}
-                      <div className="glass-panel kpi-card emerald">
-                        <div>
-                          <p className="kpi-label">Aproveitamento (≥70%)</p>
-                          <h3 className="kpi-value" style={{ color: '#a7f3d0' }}>{statsCalculated.taxaAproveitamento}%</h3>
-                          <p className="kpi-sub">{statsCalculated.alunosAprovados} de {currentData.respondentes} alunos</p>
-                        </div>
-                        <div className="kpi-icon-box">
-                          <Target size={18} />
-                        </div>
-                      </div>
-                    </div>
-
                     {/* Interactive Recharts Grid */}
                     <div className="charts-grid">
                       
@@ -1960,6 +1857,109 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
                         </div>
                       </div>
 
+                    </div>
+
+                    {/* Key Indicators Grid */}
+                    <div className="kpi-grid">
+                      {/* KPI 1 */}
+                      <div className="glass-panel kpi-card cyan">
+                        <div>
+                          <p className="kpi-label">Desempenho Médio</p>
+                          <h3 className="kpi-value">{currentData.desempenho.toFixed(2)}%</h3>
+                          <p className="kpi-sub">Média geral da turma</p>
+                        </div>
+                        <div className="kpi-icon-box">
+                          <Percent size={18} />
+                        </div>
+                      </div>
+
+                      {/* KPI 2 */}
+                      <div className="glass-panel kpi-card emerald">
+                        <div>
+                          <p className="kpi-label">Acertos Médios</p>
+                          <h3 className="kpi-value">{currentData.acertosMedio.toFixed(2)}</h3>
+                          <p className="kpi-sub">de {currentData.totalItens} itens avaliados</p>
+                        </div>
+                        <div className="kpi-icon-box">
+                          <CheckCircle2 size={18} />
+                        </div>
+                      </div>
+
+                      {/* KPI 3 */}
+                      <div className="glass-panel kpi-card rose">
+                        <div>
+                          <p className="kpi-label">Erros Médios</p>
+                          <h3 className="kpi-value">{currentData.errosMedio.toFixed(2)}</h3>
+                          <p className="kpi-sub">de {currentData.totalItens} itens avaliados</p>
+                        </div>
+                        <div className="kpi-icon-box">
+                          <XCircle size={18} />
+                        </div>
+                      </div>
+
+                      {/* KPI 4 */}
+                      <div className="glass-panel kpi-card violet">
+                        <div>
+                          <p className="kpi-label">Avaliados</p>
+                          <h3 className="kpi-value">{currentData.respondentes}</h3>
+                          <p className="kpi-sub">Alunos respondentes</p>
+                        </div>
+                        <div className="kpi-icon-box">
+                          <Users size={18} />
+                        </div>
+                      </div>
+
+                      {/* KPI 5 */}
+                      <div className="glass-panel kpi-card slate">
+                        <div>
+                          <p className="kpi-label">Tempo Médio</p>
+                          <h3 className="kpi-value" style={{ color: '#e2e8f0' }}>{statsCalculated.tempoMedioStr}</h3>
+                          <p className="kpi-sub">Tempo médio de realização</p>
+                        </div>
+                        <div className="kpi-icon-box">
+                          <Clock size={18} />
+                        </div>
+                      </div>
+
+                      {/* KPI 6 */}
+                      <div className="glass-panel kpi-card amber">
+                        <div>
+                          <p className="kpi-label">Melhor Nota</p>
+                          <h3 className="kpi-value" style={{ fontSize: '1.25rem' }} title={statsCalculated.melhorAluno?.nome}>
+                            {statsCalculated.melhorAluno?.desempenho.toFixed(1)}%
+                          </h3>
+                          <p className="kpi-sub" style={{ textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden', maxWidth: '140px' }}>
+                            {statsCalculated.melhorAluno?.nome}
+                          </p>
+                        </div>
+                        <div className="kpi-icon-box">
+                          <Award size={18} />
+                        </div>
+                      </div>
+
+                      {/* KPI 7 */}
+                      <div className="glass-panel kpi-card cyan">
+                        <div>
+                          <p className="kpi-label">Acima da Média</p>
+                          <h3 className="kpi-value" style={{ color: '#a5f3fc' }}>{statsCalculated.alunosAcimaMedia}</h3>
+                          <p className="kpi-sub">{Math.round((statsCalculated.alunosAcimaMedia / currentData.respondentes) * 100)}% da turma</p>
+                        </div>
+                        <div className="kpi-icon-box">
+                          <TrendingUp size={18} />
+                        </div>
+                      </div>
+
+                      {/* KPI 8 */}
+                      <div className="glass-panel kpi-card emerald">
+                        <div>
+                          <p className="kpi-label">Aproveitamento (≥70%)</p>
+                          <h3 className="kpi-value" style={{ color: '#a7f3d0' }}>{statsCalculated.taxaAproveitamento}%</h3>
+                          <p className="kpi-sub">{statsCalculated.alunosAprovados} de {currentData.respondentes} alunos</p>
+                        </div>
+                        <div className="kpi-icon-box">
+                          <Target size={18} />
+                        </div>
+                      </div>
                     </div>
 
                     {/* Simplified Ranking Table */}
