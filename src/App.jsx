@@ -1727,6 +1727,7 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
                                   fontSize: '11px',
                                   color: '#fff'
                                 }} 
+                                itemStyle={{ color: '#cbd5e1' }}
                                 cursor={{ fill: 'rgba(255,255,255,0.02)' }}
                               />
                               <Bar dataKey="quantidade" radius={[6, 6, 0, 0]}>
@@ -1769,6 +1770,7 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
                                     fontSize: '11px',
                                     color: '#fff'
                                   }}
+                                  itemStyle={{ color: '#cbd5e1' }}
                                   cursor={{ fill: 'rgba(255,255,255,0.02)' }}
                                 />
                                 <Bar dataKey="desempenho" radius={[0, 4, 4, 0]}>
