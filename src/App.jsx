@@ -54,6 +54,8 @@ export default function App() {
   // Estados adicionados para a reestruturação das abas
   const [selectedAlunoMatricula, setSelectedAlunoMatricula] = useState(null);
   const [alunoQuestaoFilter, setAlunoQuestaoFilter] = useState('todas'); // 'todas' | 'acertos' | 'erros'
+  const [alunoCapacidadeFilter, setAlunoCapacidadeFilter] = useState('todas');
+  const [alunoDificuldadeFilter, setAlunoDificuldadeFilter] = useState('todas');
   const [registroSearch, setRegistroSearch] = useState('');
   const [registroPage, setRegistroPage] = useState(1);
   const [copiedPrompt, setCopiedPrompt] = useState(false);
@@ -546,17 +548,32 @@ export default function App() {
           const gabarito = colIdx.gabarito >= 0 ? row[colIdx.gabarito].toString().trim() : '';
           const acertou = marcacao === gabarito;
           
-          detalhesAlunos[chave].push({
-            identificador: id,
-            capacidade: formatCapacidade(pedInfo.capacidade || (colIdx.capacidade >= 0 ? row[colIdx.capacidade] : '')),
-            subfuncao: pedInfo.subfuncao || (colIdx.subfuncao >= 0 ? row[colIdx.subfuncao] : ''),
-            padraoDesempenho: pedInfo.padraoDesempenho || (colIdx.padraoDesempenho >= 0 ? row[colIdx.padraoDesempenho] : ''),
-            conhecimento: pedInfo.conhecimento || (colIdx.conhecimento >= 0 ? row[colIdx.conhecimento] : ''),
-            dificuldade: pedInfo.dificuldade || (colIdx.dificuldade >= 0 ? row[colIdx.dificuldade] : ''),
-            marcacao: marcacao,
-            gabarito: gabarito,
-            acertou: acertou
-          });
+          const existingQuestion = detalhesAlunos[chave].find(q => q.identificador === id);
+          const newPadrao = (colIdx.padraoDesempenho >= 0 && row[colIdx.padraoDesempenho] !== undefined && row[colIdx.padraoDesempenho] !== null && row[colIdx.padraoDesempenho].toString().trim() !== '')
+            ? row[colIdx.padraoDesempenho].toString().trim()
+            : (pedInfo.padraoDesempenho || '');
+
+          if (existingQuestion) {
+            if (newPadrao && !existingQuestion.padraoDesempenho.includes(newPadrao)) {
+              if (existingQuestion.padraoDesempenho) {
+                existingQuestion.padraoDesempenho += `; ${newPadrao}`;
+              } else {
+                existingQuestion.padraoDesempenho = newPadrao;
+              }
+            }
+          } else {
+            detalhesAlunos[chave].push({
+              identificador: id,
+              capacidade: formatCapacidade(pedInfo.capacidade || (colIdx.capacidade >= 0 ? row[colIdx.capacidade] : '')),
+              subfuncao: pedInfo.subfuncao || (colIdx.subfuncao >= 0 ? row[colIdx.subfuncao] : ''),
+              padraoDesempenho: newPadrao,
+              conhecimento: pedInfo.conhecimento || (colIdx.conhecimento >= 0 ? row[colIdx.conhecimento] : ''),
+              dificuldade: pedInfo.dificuldade || (colIdx.dificuldade >= 0 ? row[colIdx.dificuldade] : ''),
+              marcacao: marcacao,
+              gabarito: gabarito,
+              acertou: acertou
+            });
+          }
         }
       }
     }
@@ -583,21 +600,35 @@ export default function App() {
               }
               
               if (qRow[0] && qRow[0] !== 'Identificador') {
-                const marcacao = qRow[6] ? qRow[6].toString().trim() : '';
-                const gabarito = qRow[7] ? qRow[7].toString().trim() : '';
-                const acertou = marcacao === gabarito;
-                
-                questList.push({
-                  identificador: qRow[0].toString().trim(),
-                  capacidade: formatCapacidade(qRow[1]),
-                  subfuncao: qRow[2] ? qRow[2].toString().trim() : '',
-                  padraoDesempenho: qRow[3] ? qRow[3].toString().trim() : '',
-                  conhecimento: qRow[4] ? qRow[4].toString().trim() : '',
-                  dificuldade: qRow[5] ? qRow[5].toString().trim() : '',
-                  marcacao: marcacao,
-                  gabarito: gabarito,
-                  acertou: acertou
-                });
+                const id = qRow[0].toString().trim();
+                const newPadrao = qRow[3] ? qRow[3].toString().trim() : '';
+                const existingQuestion = questList.find(q => q.identificador === id);
+
+                if (existingQuestion) {
+                  if (newPadrao && !existingQuestion.padraoDesempenho.includes(newPadrao)) {
+                    if (existingQuestion.padraoDesempenho) {
+                      existingQuestion.padraoDesempenho += `; ${newPadrao}`;
+                    } else {
+                      existingQuestion.padraoDesempenho = newPadrao;
+                    }
+                  }
+                } else {
+                  const marcacao = qRow[6] ? qRow[6].toString().trim() : '';
+                  const gabarito = qRow[7] ? qRow[7].toString().trim() : '';
+                  const acertou = marcacao === gabarito;
+                  
+                  questList.push({
+                    identificador: id,
+                    capacidade: formatCapacidade(qRow[1]),
+                    subfuncao: qRow[2] ? qRow[2].toString().trim() : '',
+                    padraoDesempenho: newPadrao,
+                    conhecimento: qRow[4] ? qRow[4].toString().trim() : '',
+                    dificuldade: qRow[5] ? qRow[5].toString().trim() : '',
+                    marcacao: marcacao,
+                    gabarito: gabarito,
+                    acertou: acertou
+                  });
+                }
               }
               qIdx++;
             }
@@ -906,14 +937,40 @@ export default function App() {
     });
   }, [currentData, searchQuery, filterLevel]);
 
+  const uniqueCapacidades = useMemo(() => {
+    if (!currentAluno || !currentAluno.questoes) return [];
+    const set = new Set();
+    currentAluno.questoes.forEach(q => {
+      if (q.capacidade) set.add(q.capacidade);
+    });
+    return Array.from(set).sort();
+  }, [currentAluno]);
+
+  const uniqueDificuldades = useMemo(() => {
+    if (!currentAluno || !currentAluno.questoes) return [];
+    const set = new Set();
+    currentAluno.questoes.forEach(q => {
+      if (q.dificuldade) set.add(q.dificuldade);
+    });
+    const order = { 'muito facil': 1, 'facil': 2, 'medio': 3, 'dificil': 4, 'muito dificil': 5 };
+    return Array.from(set).sort((a, b) => {
+      const aOrd = order[a.toLowerCase()] || 99;
+      const bOrd = order[b.toLowerCase()] || 99;
+      if (aOrd !== bOrd) return aOrd - bOrd;
+      return a.localeCompare(b);
+    });
+  }, [currentAluno]);
+
   const filteredQuestoesAluno = useMemo(() => {
     if (!currentAluno || !currentAluno.questoes) return [];
     return currentAluno.questoes.filter(q => {
-      if (alunoQuestaoFilter === 'acertos') return q.acertou;
-      if (alunoQuestaoFilter === 'erros') return !q.acertou;
+      if (alunoQuestaoFilter === 'acertos' && !q.acertou) return false;
+      if (alunoQuestaoFilter === 'erros' && q.acertou) return false;
+      if (alunoCapacidadeFilter !== 'todas' && q.capacidade !== alunoCapacidadeFilter) return false;
+      if (alunoDificuldadeFilter !== 'todas' && q.dificuldade !== alunoDificuldadeFilter) return false;
       return true;
     });
-  }, [currentAluno, alunoQuestaoFilter]);
+  }, [currentAluno, alunoQuestaoFilter, alunoCapacidadeFilter, alunoDificuldadeFilter]);
 
   const assuntoStats = useMemo(() => {
     if (!currentAluno || !currentAluno.questoes) return [];
@@ -2068,6 +2125,8 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
                                 onChange={(e) => {
                                   setSelectedAlunoMatricula(e.target.value);
                                   setAlunoQuestaoFilter('todas'); // reset filter
+                                  setAlunoCapacidadeFilter('todas');
+                                  setAlunoDificuldadeFilter('todas');
                                 }}
                                 className="filter-select"
                                 style={{ width: '100%', maxWidth: '400px' }}
@@ -2267,30 +2326,71 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
                             </div>
 
                             {/* Response Filter Buttons */}
-                            <div className="responses-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2rem', marginBottom: '1rem', borderBottom: '1px solid rgba(255, 255, 255, 0.05)', paddingBottom: '0.5rem' }}>
-                              <h3 style={{ fontSize: '1rem', color: 'white', fontWeight: 'bold' }}>Caderno de Prova & Respostas</h3>
-                              <div style={{ display: 'flex', background: 'rgba(0,0,0,0.2)', padding: '0.25rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)' }}>
-                                <button
-                                  onClick={() => setAlunoQuestaoFilter('todas')}
-                                  className={`btn-filter-sub ${alunoQuestaoFilter === 'todas' ? 'active' : ''}`}
-                                  style={{ padding: '0.35rem 0.75rem', fontSize: '0.65rem', border: 'none', background: alunoQuestaoFilter === 'todas' ? 'var(--bg-secondary)' : 'transparent', color: alunoQuestaoFilter === 'todas' ? 'var(--accent-cyan)' : 'var(--text-secondary)', borderRadius: '6px', cursor: 'pointer', fontWeight: '700', transition: 'var(--transition-fast)' }}
-                                >
-                                  Ver Todas ({currentAluno.questoes.length})
-                                </button>
-                                <button
-                                  onClick={() => setAlunoQuestaoFilter('acertos')}
-                                  className={`btn-filter-sub ${alunoQuestaoFilter === 'acertos' ? 'active' : ''}`}
-                                  style={{ padding: '0.35rem 0.75rem', fontSize: '0.65rem', border: 'none', background: alunoQuestaoFilter === 'acertos' ? 'var(--bg-secondary)' : 'transparent', color: alunoQuestaoFilter === 'acertos' ? 'var(--accent-emerald)' : 'var(--text-secondary)', borderRadius: '6px', cursor: 'pointer', fontWeight: '700', transition: 'var(--transition-fast)' }}
-                                >
-                                  Acertos ({currentAluno.acertos})
-                                </button>
-                                <button
-                                  onClick={() => setAlunoQuestaoFilter('erros')}
-                                  className={`btn-filter-sub ${alunoQuestaoFilter === 'erros' ? 'active' : ''}`}
-                                  style={{ padding: '0.35rem 0.75rem', fontSize: '0.65rem', border: 'none', background: alunoQuestaoFilter === 'erros' ? 'var(--bg-secondary)' : 'transparent', color: alunoQuestaoFilter === 'erros' ? 'var(--accent-rose)' : 'var(--text-secondary)', borderRadius: '6px', cursor: 'pointer', fontWeight: '700', transition: 'var(--transition-fast)' }}
-                                >
-                                  Erros ({currentAluno.erros})
-                                </button>
+                            <div className="responses-section-header" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '2rem', marginBottom: '1rem', borderBottom: '1px solid rgba(255, 255, 255, 0.05)', paddingBottom: '0.75rem' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', width: '100%' }}>
+                                <h3 style={{ fontSize: '1rem', color: 'white', fontWeight: 'bold' }}>Caderno de Prova & Respostas</h3>
+                                <div style={{ display: 'flex', background: 'rgba(0,0,0,0.2)', padding: '0.25rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                                  <button
+                                    onClick={() => setAlunoQuestaoFilter('todas')}
+                                    className={`btn-filter-sub ${alunoQuestaoFilter === 'todas' ? 'active' : ''}`}
+                                    style={{ padding: '0.35rem 0.75rem', fontSize: '0.65rem', border: 'none', background: alunoQuestaoFilter === 'todas' ? 'var(--bg-secondary)' : 'transparent', color: alunoQuestaoFilter === 'todas' ? 'var(--accent-cyan)' : 'var(--text-secondary)', borderRadius: '6px', cursor: 'pointer', fontWeight: '700', transition: 'var(--transition-fast)' }}
+                                  >
+                                    Ver Todas ({currentAluno.questoes.length})
+                                  </button>
+                                  <button
+                                    onClick={() => setAlunoQuestaoFilter('acertos')}
+                                    className={`btn-filter-sub ${alunoQuestaoFilter === 'acertos' ? 'active' : ''}`}
+                                    style={{ padding: '0.35rem 0.75rem', fontSize: '0.65rem', border: 'none', background: alunoQuestaoFilter === 'acertos' ? 'var(--bg-secondary)' : 'transparent', color: alunoQuestaoFilter === 'acertos' ? 'var(--accent-emerald)' : 'var(--text-secondary)', borderRadius: '6px', cursor: 'pointer', fontWeight: '700', transition: 'var(--transition-fast)' }}
+                                  >
+                                    Acertos ({currentAluno.acertos})
+                                  </button>
+                                  <button
+                                    onClick={() => setAlunoQuestaoFilter('erros')}
+                                    className={`btn-filter-sub ${alunoQuestaoFilter === 'erros' ? 'active' : ''}`}
+                                    style={{ padding: '0.35rem 0.75rem', fontSize: '0.65rem', border: 'none', background: alunoQuestaoFilter === 'erros' ? 'var(--bg-secondary)' : 'transparent', color: alunoQuestaoFilter === 'erros' ? 'var(--accent-rose)' : 'var(--text-secondary)', borderRadius: '6px', cursor: 'pointer', fontWeight: '700', transition: 'var(--transition-fast)' }}
+                                  >
+                                    Erros ({currentAluno.erros})
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Capacity and Difficulty Filters row */}
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', width: '100%', alignItems: 'center' }}>
+                                {/* Capacity Selector */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', minWidth: '220px', flexGrow: 1 }}>
+                                  <label style={{ fontSize: '0.6rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 'bold' }}>Filtrar por Capacidade</label>
+                                  <select
+                                    value={alunoCapacidadeFilter}
+                                    onChange={(e) => setAlunoCapacidadeFilter(e.target.value)}
+                                    className="filter-select"
+                                    style={{ width: '100%', padding: '0.45rem 1.5rem 0.45rem 0.75rem', fontSize: '0.7rem' }}
+                                  >
+                                    <option value="todas">Todas as Capacidades</option>
+                                    {uniqueCapacidades.map((cap) => (
+                                      <option key={cap} value={cap}>
+                                        {cap}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                {/* Difficulty Selector */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', minWidth: '140px' }}>
+                                  <label style={{ fontSize: '0.6rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 'bold' }}>Filtrar por Dificuldade</label>
+                                  <select
+                                    value={alunoDificuldadeFilter}
+                                    onChange={(e) => setAlunoDificuldadeFilter(e.target.value)}
+                                    className="filter-select"
+                                    style={{ width: '100%', padding: '0.45rem 1.5rem 0.45rem 0.75rem', fontSize: '0.7rem' }}
+                                  >
+                                    <option value="todas">Todas as Dificuldades</option>
+                                    {uniqueDificuldades.map((diff) => (
+                                      <option key={diff} value={diff}>
+                                        {diff}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
                               </div>
                             </div>
 
