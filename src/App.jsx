@@ -1376,21 +1376,54 @@ Com base no diagnóstico individual acima, estruture uma proposta pedagógica pe
       return;
     }
 
+    let newIdDb = target.id_db;
+
     if (isSupabaseConfigured && target.id_db) {
       try {
-        const { error } = await supabase
-          .from('turmas')
-          .update({ nome_key: newNomeKey })
-          .eq('id', target.id_db);
-        if (error) throw error;
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const dadosClean = { ...target };
+          delete dadosClean.id_db;
+          
+          // 1. Inserir nova linha com a nova chave
+          const { data, error: insertError } = await supabase
+            .from('turmas')
+            .insert([{
+              user_id: user.id,
+              nome_key: newNomeKey,
+              dados: dadosClean
+            }])
+            .select();
+          
+          if (insertError) throw insertError;
+          
+          if (data && data[0]) {
+            newIdDb = data[0].id;
+            
+            // 2. Excluir linha antiga
+            const { error: deleteError } = await supabase
+              .from('turmas')
+              .delete()
+              .eq('id', target.id_db);
+            
+            if (deleteError) {
+              console.warn("Erro ao excluir registro antigo do Supabase:", deleteError.message);
+            }
+          }
+        }
       } catch (err) {
         console.error("Erro ao renomear no Supabase:", err.message);
+        alert("Erro ao salvar o novo nome na nuvem. Verifique sua conexão.");
+        setRenamingTabKey(null);
+        return;
       }
     }
 
     setTurmas(prev => {
       const updated = { ...prev };
-      updated[newNomeKey] = { ...updated[renamingTabKey] };
+      const restData = { ...updated[renamingTabKey] };
+      delete restData.id_db;
+      updated[newNomeKey] = { ...restData, id_db: newIdDb };
       delete updated[renamingTabKey];
       return updated;
     });
@@ -1971,6 +2004,18 @@ Com base no diagnóstico individual acima, estruture uma proposta pedagógica pe
               <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', background: 'rgba(255, 255, 255, 0.02)', padding: '0.25rem 0.5rem', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
                 Modo Local (Sem Nuvem)
               </span>
+            )}
+
+            {Object.keys(turmas).length > 0 && (
+              <button 
+                onClick={() => fileInputRef.current.click()}
+                className="btn-help"
+                style={{ borderColor: 'var(--accent-emerald-border)', color: 'var(--accent-emerald)', background: 'var(--accent-emerald-glow)' }}
+                title="Importar novas planilhas de turmas"
+              >
+                <UploadCloud size={14} style={{ color: 'var(--accent-emerald)' }} />
+                Importar Planilha
+              </button>
             )}
 
             <button 
