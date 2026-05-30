@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo, useEffect } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { 
@@ -10,8 +10,6 @@ import {
   BarChart3, 
   Users2, 
   Search, 
-  ChevronDown, 
-  ChevronUp, 
   FileSpreadsheet, 
   Sparkles,
   CheckCircle2,
@@ -20,12 +18,12 @@ import {
   TrendingUp,
   X,
   Target,
-  Trophy,
   ArrowRight,
   Download,
   AlertCircle,
   RefreshCw,
-  Settings
+  Info,
+  Edit2
 } from 'lucide-react';
 import {
   BarChart,
@@ -38,7 +36,10 @@ import {
   ScatterChart,
   Scatter,
   ZAxis,
-  Cell
+  Cell,
+  PieChart,
+  Pie,
+  Legend
 } from 'recharts';
 
 export default function App() {
@@ -48,8 +49,10 @@ export default function App() {
   const [isDragging, setIsDragging] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterLevel, setFilterLevel] = useState('todos'); // 'todos' | 'excelente' | 'bom' | 'regular' | 'insuficiente'
-  const [expandedAluno, setExpandedAluno] = useState(null); // 'matricula'
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [showAboutModal, setShowAboutModal] = useState(false);
+  const [renamingTabKey, setRenamingTabKey] = useState(null);
+  const [renameInputVal, setRenameInputVal] = useState('');
 
   // Estados adicionados para a reestruturação das abas
   const [selectedAlunoMatricula, setSelectedAlunoMatricula] = useState(null);
@@ -59,6 +62,12 @@ export default function App() {
   const [registroSearch, setRegistroSearch] = useState('');
   const [registroPage, setRegistroPage] = useState(1);
   const [copiedPrompt, setCopiedPrompt] = useState(false);
+  const [copiedAlunoPrompt, setCopiedAlunoPrompt] = useState(false);
+
+  // Filtros da Matriz de Itens Pedagógicos
+  const [itemSearchQuery, setItemSearchQuery] = useState('');
+  const [itemDificuldadeFilter, setItemDificuldadeFilter] = useState('todos');
+  const [itemStatusFilter, setItemStatusFilter] = useState('todos');
 
   // Supabase Authentication & Cloud States
   const [session, setSession] = useState(null);
@@ -67,50 +76,9 @@ export default function App() {
   const [isSignUpMode, setIsSignUpMode] = useState(false);
   const [isResetPasswordMode, setIsResetPasswordMode] = useState(false);
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
-  const [isSavingToCloud, setIsSavingToCloud] = useState(false);
 
-  // Auto-sync on startup if valid credentials exist
-  useEffect(() => {
-    // Obter sessão inicial e monitorar mudanças de autenticação
-    if (isSupabaseConfigured) {
-      // Verificar se a URL contém tokens de recuperação de senha do Supabase
-      if (window.location.hash && (window.location.hash.includes('type=recovery') || window.location.hash.includes('access_token='))) {
-        setIsUpdatingPassword(true);
-        // Esperar um curto período para o SDK do Supabase ler os tokens da URL e então limpar o endereço
-        setTimeout(() => {
-          window.history.replaceState(null, null, ' ');
-        }, 500);
-      }
-
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        setSession(session);
-        setAuthLoading(false);
-        if (session?.user) {
-          loadUserTurmas(session.user.id);
-        }
-      });
-
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-        setSession(session);
-        if (event === 'PASSWORD_RECOVERY') {
-          setIsUpdatingPassword(true);
-        }
-        if (session?.user) {
-          loadUserTurmas(session.user.id);
-        } else {
-          setTurmas({});
-          setSelectedTurma(null);
-        }
-        setAuthLoading(false);
-      });
-
-      return () => subscription.unsubscribe();
-    } else {
-      setAuthLoading(false);
-    }
-  }, []);
-
-  const loadUserTurmas = async (userId) => {
+  // Hoisted function to load turmas
+  async function loadUserTurmas() {
     if (!isSupabaseConfigured) return;
     try {
       const { data, error } = await supabase
@@ -131,17 +99,100 @@ export default function App() {
       
       const keys = Object.keys(loadedTurmas);
       if (keys.length > 0) {
-        setSelectedTurma(keys[keys.length - 1]);
-        setSelectedAlunoMatricula(loadedTurmas[keys[keys.length - 1]]?.alunos[0]?.matricula || null);
+        setSelectedTurma(prevSelected => {
+          const nextSelected = (prevSelected && keys.includes(prevSelected)) ? prevSelected : keys[keys.length - 1];
+          
+          setSelectedAlunoMatricula(prevStudent => {
+            if (prevStudent) {
+              const studentExists = loadedTurmas[nextSelected]?.alunos?.some(a => a.matricula === prevStudent);
+              if (studentExists) return prevStudent;
+            }
+            return loadedTurmas[nextSelected]?.alunos[0]?.matricula || null;
+          });
+          
+          return nextSelected;
+        });
       }
     } catch (err) {
       console.error("Erro ao carregar turmas:", err.message);
     }
-  };
+  }
+
+  // Auto-sync on startup if valid credentials exist
+  useEffect(() => {
+    console.log("App mounted. Supabase configured:", isSupabaseConfigured);
+    
+    // Obter sessão inicial e monitorar mudanças de autenticação
+    if (isSupabaseConfigured) {
+      // Verificar se a URL contém tokens de recuperação de senha do Supabase
+      if (window.location.hash && (window.location.hash.includes('type=recovery') || window.location.hash.includes('access_token='))) {
+        console.log("Password recovery token detected in hash");
+        setTimeout(() => {
+          setIsUpdatingPassword(true);
+          window.history.replaceState(null, null, ' ');
+        }, 100);
+      }
+
+      // 1. Obter sessão inicial de forma assíncrona com tratamento de erros robusto
+      console.log("Calling getSession...");
+      supabase.auth.getSession().then(async ({ data: { session } }) => {
+        console.log("getSession success. Session:", session ? "Active" : "None");
+        setSession(session);
+        if (session?.user) {
+          console.log("Loading user turmas...");
+          await loadUserTurmas();
+        }
+      }).catch(err => {
+        console.error("Error in getSession:", err);
+      }).finally(() => {
+        console.log("Setting authLoading to false (initial check complete)");
+        setAuthLoading(false);
+      });
+
+      // 2. Monitorar mudanças futuras de autenticação, ignorando o disparo inicial redundante
+      console.log("Registering onAuthStateChange listener...");
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        console.log("onAuthStateChange event:", event, "Session active:", !!session);
+        
+        // Use setTimeout para evitar deadlock no bloqueio do listener de autenticação do Supabase
+        setTimeout(async () => {
+          setSession(session);
+          if (event === 'PASSWORD_RECOVERY') {
+            setIsUpdatingPassword(true);
+          }
+          
+          if (event === 'SIGNED_IN') {
+            setAuthLoading(true);
+            if (session?.user) {
+              console.log("User signed in. Loading turmas...");
+              await loadUserTurmas();
+            }
+            setAuthLoading(false);
+          } else if (event === 'SIGNED_OUT') {
+            console.log("User signed out. Clearing state.");
+            setTurmas({});
+            setSelectedTurma(null);
+            setAuthLoading(false);
+          }
+        }, 0);
+      });
+
+      return () => {
+        console.log("Cleaning up onAuthStateChange listener");
+        subscription.unsubscribe();
+      };
+    } else {
+      console.log("Supabase not configured. Setting authLoading to false.");
+      setTimeout(() => {
+        setAuthLoading(false);
+      }, 0);
+    }
+  }, []);
+
+  // loadUserTurmas is now hoisted and declared above useEffect
 
   const saveTurmaToSupabase = async (nomeKey, dados) => {
     if (!isSupabaseConfigured) return;
-    setIsSavingToCloud(true);
     try {
       // Obter usuário atual
       const { data: { user } } = await supabase.auth.getUser();
@@ -166,8 +217,6 @@ export default function App() {
       }
     } catch (err) {
       console.error("Erro ao salvar no Supabase:", err.message);
-    } finally {
-      setIsSavingToCloud(false);
     }
   };
 
@@ -817,6 +866,83 @@ export default function App() {
       };
     });
 
+    // Dificuldade levels calculation
+    const desempenhoPorDificuldade = {};
+    if (currentData.possuiAbaRegistro) {
+      currentData.alunos.forEach((a) => {
+        a.questoes.forEach((q) => {
+          let dif = q.dificuldade ? q.dificuldade.trim() : '';
+          if (!dif) return;
+          const difLower = dif.toLowerCase();
+          if (difLower.includes('muito facil') || difLower.includes('muito fácil')) {
+            dif = 'Muito Fácil';
+          } else if (difLower.includes('muito dificil') || difLower.includes('muito difícil')) {
+            dif = 'Muito Difícil';
+          } else if (difLower.includes('facil') || difLower.includes('fácil')) {
+            dif = 'Fácil';
+          } else if (difLower.includes('dificil') || difLower.includes('difícil')) {
+            dif = 'Difícil';
+          } else if (difLower.includes('medio') || difLower.includes('médio') || difLower.includes('media') || difLower.includes('média')) {
+            dif = 'Médio';
+          } else {
+            dif = dif.charAt(0).toUpperCase() + dif.slice(1).toLowerCase();
+          }
+
+          if (!desempenhoPorDificuldade[dif]) {
+            desempenhoPorDificuldade[dif] = { acertos: 0, total: 0 };
+          }
+          desempenhoPorDificuldade[dif].total += 1;
+          if (q.acertou) {
+            desempenhoPorDificuldade[dif].acertos += 1;
+          }
+        });
+      });
+    }
+
+    const orderDificuldade = ['Muito Fácil', 'Fácil', 'Médio', 'Difícil', 'Muito Difícil'];
+    const dadosDificuldadeChart = orderDificuldade
+      .filter(nivel => desempenhoPorDificuldade[nivel])
+      .map(nivel => {
+        const item = desempenhoPorDificuldade[nivel];
+        return {
+          dificuldade: nivel,
+          desempenho: Math.round((item.acertos / item.total) * 100),
+          acertos: item.acertos,
+          total: item.total
+        };
+      });
+
+    // Capacidade acertos e erros calculation
+    const desempenhoPorCapacidade = {};
+    if (currentData.possuiAbaRegistro) {
+      currentData.alunos.forEach((a) => {
+        a.questoes.forEach((q) => {
+          const cap = q.capacidade ? q.capacidade.trim() : 'Outros';
+          if (!desempenhoPorCapacidade[cap]) {
+            desempenhoPorCapacidade[cap] = { acertos: 0, erros: 0, total: 0 };
+          }
+          desempenhoPorCapacidade[cap].total += 1;
+          if (q.acertou) {
+            desempenhoPorCapacidade[cap].acertos += 1;
+          } else {
+            desempenhoPorCapacidade[cap].erros += 1;
+          }
+        });
+      });
+    }
+
+    const dadosCapacidadeChart = Object.keys(desempenhoPorCapacidade)
+      .map((cap) => {
+        const item = desempenhoPorCapacidade[cap];
+        return {
+          capacidade: cap,
+          acertos: item.acertos,
+          erros: item.erros,
+          total: item.total
+        };
+      })
+      .sort((a, b) => a.capacidade.localeCompare(b.capacidade, undefined, { numeric: true, sensitivity: 'base' }));
+
     return {
       melhorAluno,
       piorAluno,
@@ -827,7 +953,9 @@ export default function App() {
       taxaAproveitamento: Math.round((alunosAprovados / currentData.respondentes) * 100),
       dadosNivelChart,
       dadosAssuntoChart,
-      dadosDispersao
+      dadosDispersao,
+      dadosDificuldadeChart,
+      dadosCapacidadeChart
     };
   }, [currentData]);
 
@@ -999,6 +1127,61 @@ export default function App() {
     return { criticas, atencao, dominadas };
   }, [matrizQuestoes]);
 
+  const uniqueDificuldadesItens = useMemo(() => {
+    const set = new Set();
+    matrizQuestoes.forEach(q => {
+      if (q.dificuldade) set.add(q.dificuldade);
+    });
+    const order = { 'muito facil': 1, 'facil': 2, 'medio': 3, 'dificil': 4, 'muito dificil': 5, 'muito fácil': 1, 'fácil': 2, 'médio': 3, 'difícil': 4, 'muito difícil': 5 };
+    return Array.from(set).sort((a, b) => {
+      const aOrd = order[a.toLowerCase()] || 99;
+      const bOrd = order[b.toLowerCase()] || 99;
+      if (aOrd !== bOrd) return aOrd - bOrd;
+      return a.localeCompare(b);
+    });
+  }, [matrizQuestoes]);
+
+  const filteredMatrizQuestoes = useMemo(() => {
+    return matrizQuestoes.filter(q => {
+      const query = itemSearchQuery.toLowerCase();
+      const matchesSearch = !query || 
+        (q.identificador && q.identificador.toString().toLowerCase().includes(query)) ||
+        (q.capacidade && q.capacidade.toLowerCase().includes(query)) ||
+        (q.subfuncao && q.subfuncao.toLowerCase().includes(query)) ||
+        (q.padraoDesempenho && q.padraoDesempenho.toLowerCase().includes(query)) ||
+        (q.conhecimento && q.conhecimento.toLowerCase().includes(query));
+      
+      let matchesDifficulty = true;
+      if (itemDificuldadeFilter !== 'todos') {
+        matchesDifficulty = q.dificuldade?.toLowerCase() === itemDificuldadeFilter.toLowerCase();
+      }
+
+      let matchesStatus = true;
+      if (itemStatusFilter !== 'todos') {
+        matchesStatus = q.status === itemStatusFilter;
+      }
+
+      return matchesSearch && matchesDifficulty && matchesStatus;
+    });
+  }, [matrizQuestoes, itemSearchQuery, itemDificuldadeFilter, itemStatusFilter]);
+
+  const chartMatrizQuestoes = useMemo(() => {
+    return [...matrizQuestoes].sort((a, b) => {
+      const aNum = parseInt(a.identificador) || 0;
+      const bNum = parseInt(b.identificador) || 0;
+      if (aNum !== bNum) return aNum - bNum;
+      return a.identificador.toString().localeCompare(b.identificador.toString());
+    });
+  }, [matrizQuestoes]);
+
+  const pieCriticidadeData = useMemo(() => {
+    return [
+      { name: 'Críticas', value: criticidadeStats.criticas, fill: 'var(--accent-rose)' },
+      { name: 'Atenção', value: criticidadeStats.atencao, fill: 'var(--accent-amber)' },
+      { name: 'Dominadas', value: criticidadeStats.dominadas, fill: 'var(--accent-emerald)' }
+    ].filter(item => item.value > 0);
+  }, [criticidadeStats]);
+
   const iaPrompt = useMemo(() => {
     if (!currentData) return '';
     
@@ -1035,8 +1218,9 @@ export default function App() {
       ? alunosCriticos.map(a => `- ${a.nome} (${a.desempenho.toFixed(1)}% de aproveitamento - ${a.acertos} acertos de ${totalItens})`).join('\n')
       : 'Nenhum estudante com aproveitamento inferior a 50%.';
 
-    return `Aja como um especialista em coordenação pedagógica, design educacional e tutor do SENAI.
-Fui encarregado de realizar uma intervenção pedagógica de revisão com base nos resultados obtidos por uma turma na avaliação oficial do SAEP (Sistema de Avaliação da Educação Profissional).
+    return `Você é um especialista em Metodologia SENAI de Educação Profissional (MSEP).
+
+Analise os resultados da avaliação objetiva do SAEP apresentados abaixo e elabore um Plano de Ação Pedagógico estruturado conforme os princípios da MSEP.
 
 Aqui estão os dados estruturados da avaliação para análise:
 
@@ -1070,6 +1254,69 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
 3. **Plano de Suporte Individualizado**: Sugira estratégias de recuperação contínua para os estudantes listados na seção de atenção individual, sem desacelerar o restante do cronograma da turma.
 4. **Questões de Fixação**: Crie 2 exemplos de questões conceituais inéditas no mesmo nível de complexidade das questões críticas para que eu possa aplicar em sala de aula como verificação de aprendizagem.`;
   }, [currentData, matrizQuestoes]);
+
+  const iaAlunoPrompt = useMemo(() => {
+    if (!currentData || !currentAluno) return '';
+    
+    const curso = currentData.curso || 'Curso Técnico';
+    const turma = currentData.turmaName || 'Turma Geral';
+    const escola = currentData.escola || 'SENAI';
+    const totalItens = currentData.totalItens;
+    
+    // Analyze question responses
+    const acertosDetalhes = [];
+    const errosDetalhes = [];
+    
+    if (currentAluno.questoes) {
+      currentAluno.questoes.forEach(q => {
+        const desc = `- Questão #${q.identificador}: ${q.conhecimento || 'Geral'}
+  • Capacidade: ${q.capacidade || 'Não especificada'}
+  • Subfunção: ${q.subfuncao || 'Não especificada'}
+  • Dificuldade: ${q.dificuldade || 'Média'}`;
+        if (q.acertou) {
+          acertosDetalhes.push(desc);
+        } else {
+          errosDetalhes.push(desc);
+        }
+      });
+    }
+
+    const acertosText = acertosDetalhes.length > 0 ? acertosDetalhes.join('\n\n') : 'Nenhuma questão acertada.';
+    const errosText = errosDetalhes.length > 0 ? errosDetalhes.join('\n\n') : 'Nenhuma questão errada.';
+
+    return `Você é um especialista em Metodologia SENAI de Educação Profissional (MSEP) e tutor de acompanhamento pedagógico.
+
+Analise o desempenho individual do estudante na avaliação objetiva do SAEP e elabore um Plano de Estudo e Recuperação Individualizado (PERI) focado no desenvolvimento das capacidades profissionais ainda não dominadas.
+
+Aqui estão os dados individuais do estudante para análise:
+
+### DADOS GERAIS DO ESTUDANTE
+- Nome do Estudante: ${currentAluno.nome}
+- Matrícula: ${currentAluno.matricula}
+- Escola: ${escola}
+- Curso: ${curso}
+- Turma: ${turma}
+- Aproveitamento Individual: ${currentAluno.desempenho.toFixed(1)}% (${currentAluno.acertos} acertos de ${totalItens} itens)
+- Tempo de Realização: ${currentAluno.tempo}
+
+### ERROS E LACUNAS CONCEITUAIS (Questões em que o estudante errou)
+Analise com atenção estes itens para identificar os pontos de melhoria:
+${errosText}
+
+### PONTOS FORTES E DOMÍNIOS (Questões em que o estudante acertou)
+Estes são os conhecimentos e capacidades em que o estudante já demonstrou proficiência:
+${acertosText}
+
+---
+
+### SUA DIRETRIZ (PLANO DE ESTUDO INDIVIDUALIZADO):
+Com base no diagnóstico individual acima, estruture uma proposta pedagógica personalizada contendo:
+
+1. **Diagnóstico Cognitivo Individual**: Explique a provável causa das dificuldades do aluno (identificando as capacidades deficitárias em comum entre as questões erradas).
+2. **Plano de Atividades Dirigidas**: Indique de 3 a 4 atividades práticas do cotidiano técnico/profissional do SENAI que o aluno pode realizar (de forma autônoma ou com auxílio do tutor) para recuperar esses tópicos críticos.
+3. **Cronograma de Estudos Recomendado**: Sugira um roteiro de estudos semanal (de 2 a 4 horas por semana) detalhando o que ele deve revisar e praticar.
+4. **Indicação de Materiais**: Recomende os recursos de aprendizagem (como manuais técnicos, simuladores virtuais, práticas laboratoriais ou videoaulas) mais indicados para o perfil técnico das áreas que ele precisa consolidar.`;
+  }, [currentData, currentAluno]);
 
   const getClassificacaoTempo = (tempoStr, tempoMedioSeg) => {
     if (tempoMedioSeg === 0) return { label: 'Normal', colorClass: 'normal', isSlow: false, isFast: false };
@@ -1108,6 +1355,111 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
     } else {
       setSelectedTurma(null);
       setSelectedAlunoMatricula(null);
+    }
+  };
+
+  const handleRenameConfirm = async () => {
+    if (!renameInputVal || renameInputVal.trim() === '' || renameInputVal === renamingTabKey) {
+      setRenamingTabKey(null);
+      return;
+    }
+    const newNomeKey = renameInputVal.trim();
+    
+    if (turmas[newNomeKey]) {
+      alert("Já existe uma turma com este nome.");
+      return;
+    }
+
+    const target = turmas[renamingTabKey];
+    if (!target) {
+      setRenamingTabKey(null);
+      return;
+    }
+
+    if (isSupabaseConfigured && target.id_db) {
+      try {
+        const { error } = await supabase
+          .from('turmas')
+          .update({ nome_key: newNomeKey })
+          .eq('id', target.id_db);
+        if (error) throw error;
+      } catch (err) {
+        console.error("Erro ao renomear no Supabase:", err.message);
+      }
+    }
+
+    setTurmas(prev => {
+      const updated = { ...prev };
+      updated[newNomeKey] = { ...updated[renamingTabKey] };
+      delete updated[renamingTabKey];
+      return updated;
+    });
+
+    if (selectedTurma === renamingTabKey) {
+      setSelectedTurma(newNomeKey);
+    }
+
+    setRenamingTabKey(null);
+  };
+
+  const handleDownloadTurma = (nomeKey) => {
+    const target = turmas[nomeKey];
+    if (!target) return;
+
+    try {
+      const wb = XLSX.utils.book_new();
+      
+      const resumoData = [];
+      resumoData.push([`Curso: ${target.curso || ''}`]);
+      resumoData.push([`Turma: ${target.turmaName || ''}`]);
+      resumoData.push([`Escola: ${target.escola || ''}`]);
+      resumoData.push([`Período: ${target.periodo || ''}`]);
+      resumoData.push([`Avaliação: ${target.dataProva || ''}`]);
+      resumoData.push([`Turno: ${target.turno || ''}`]);
+      resumoData.push([]);
+      resumoData.push(['Desempenho na avaliação', 'Acertos médio', 'Erros médio', 'Total de itens', 'Total de respondentes']);
+      resumoData.push([`${target.desempenho.toFixed(2)}%`, target.acertosMedio, target.errosMedio, target.totalItens, target.respondentes]);
+      resumoData.push([]);
+      resumoData.push(['Aluno', 'Matrícula', 'Desempenho na Avaliação', 'Acertos', 'Erros', 'Tempo de realização']);
+      target.alunos.forEach(a => {
+        resumoData.push([a.nome, a.matricula, `${a.desempenho.toFixed(2)}%`, a.acertos, a.erros, a.tempo]);
+      });
+      const wsResumo = XLSX.utils.aoa_to_sheet(resumoData);
+      XLSX.utils.book_append_sheet(wb, wsResumo, 'Estatística da Aplicação');
+      
+      if (target.possuiAbaRegistro) {
+        const registroData = [];
+        registroData.push(['Aluno', 'Matrícula', 'Identificador', 'Capacidade', 'Subfunção', 'Padrão de desempenho', 'Conhecimento', 'Dificuldade', 'Marcação Respondente', 'Gabarito', 'Curso', 'Turma', 'Avaliação', 'Escola', 'Turno', 'Período']);
+        target.alunos.forEach(a => {
+          a.questoes.forEach(q => {
+            registroData.push([
+              a.nome,
+              a.matricula,
+              q.identificador,
+              q.capacidade,
+              q.subfuncao,
+              q.padraoDesempenho,
+              q.conhecimento,
+              q.dificuldade,
+              q.marcacao || 'N/R',
+              q.gabarito,
+              target.curso || '',
+              target.turmaName || '',
+              target.dataProva || '',
+              target.escola || '',
+              target.turno || '',
+              target.periodo || ''
+            ]);
+          });
+        });
+        const wsRegistro = XLSX.utils.aoa_to_sheet(registroData);
+        XLSX.utils.book_append_sheet(wb, wsRegistro, 'por Registro');
+      }
+
+      XLSX.writeFile(wb, `${nomeKey}.xlsx`);
+    } catch (err) {
+      console.error("Erro ao gerar/baixar planilha:", err.message);
+      alert("Ocorreu um erro ao exportar a planilha.");
     }
   };
 
@@ -1531,14 +1883,25 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
             </button>
             
             <button
-              onClick={() => setActiveSubTab('registro')}
-              className={`sidebar-item ${activeSubTab === 'registro' ? 'active' : ''}`}
-              title="Desempenho Ind. por Registro"
+              onClick={() => setActiveSubTab('matriz')}
+              className={`sidebar-item ${activeSubTab === 'matriz' ? 'active' : ''}`}
+              title="Matriz Pedagógica de Desempenho por Item"
+            >
+              <div className="sidebar-icon">
+                <Target size={18} />
+              </div>
+              <span className="sidebar-label">Matriz Pedagógica</span>
+            </button>
+            
+            <button
+              onClick={() => setActiveSubTab('logs')}
+              className={`sidebar-item ${activeSubTab === 'logs' ? 'active' : ''}`}
+              title="Registro Plano de Respostas (Logs)"
             >
               <div className="sidebar-icon">
                 <FileSpreadsheet size={18} />
               </div>
-              <span className="sidebar-label">Registros e Itens</span>
+              <span className="sidebar-label">Logs de Respostas</span>
             </button>
             
             <button
@@ -1555,14 +1918,14 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
 
           <div className="sidebar-footer">
             <button
-              onClick={() => setShowHelpModal(true)}
+              onClick={() => setShowAboutModal(true)}
               className="sidebar-item help-item"
-              title="Como importar planilhas?"
+              title="Sobre o Dashboard"
             >
               <div className="sidebar-icon">
-                <HelpCircle size={18} />
+                <Info size={18} />
               </div>
-              <span className="sidebar-label">Ajuda</span>
+              <span className="sidebar-label">Sobre</span>
             </button>
           </div>
         </aside>
@@ -1691,17 +2054,41 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
                     key={nomeKey}
                     onClick={() => {
                       setSelectedTurma(nomeKey);
-                      setExpandedAluno(null);
                     }}
                     className={`tab-button ${selectedTurma === nomeKey ? 'active' : ''}`}
                   >
                     <FileSpreadsheet size={14} />
                     <span>{nomeKey}</span>
+                    
+                    <span 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setRenamingTabKey(nomeKey);
+                        setRenameInputVal(nomeKey);
+                      }}
+                      className="tab-action"
+                      title="Renomear planilha/turma"
+                    >
+                      <Edit2 size={11} />
+                    </span>
+
+                    <span 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDownloadTurma(nomeKey);
+                      }}
+                      className="tab-action"
+                      title="Baixar planilha (.xlsx)"
+                    >
+                      <Download size={11} />
+                    </span>
+
                     <span 
                       onClick={(e) => removerTurma(nomeKey, e)}
                       className="tab-remove"
+                      title="Excluir planilha"
                     >
-                      <X size={12} />
+                      <X size={11} />
                     </span>
                   </button>
                 ))}
@@ -1851,6 +2238,99 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
                         )}
                       </div>
 
+                      {/* Chart 4: Desempenho por Nível de Dificuldade */}
+                      <div className="glass-panel chart-card">
+                        <div className="chart-header">
+                          <h3 className="chart-title">
+                            <span style={{ backgroundColor: 'var(--accent-emerald)' }}></span>
+                            Desempenho por Nível de Dificuldade
+                          </h3>
+                          <p className="chart-sub">Média de acertos da turma por complexidade das questões</p>
+                        </div>
+                        {currentData.possuiAbaRegistro ? (
+                          <div style={{ flexGrow: 1, minHeight: '280px' }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                              <BarChart data={statsCalculated.dadosDificuldadeChart} margin={{ top: 20, right: 10, left: -25, bottom: 5 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                                <XAxis dataKey="dificuldade" stroke="#94a3b8" fontSize={10} tickLine={false} />
+                                <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} domain={[0, 100]} unit="%" />
+                                <Tooltip 
+                                  formatter={(value) => [`${value}%`, 'Taxa de Acertos']}
+                                  contentStyle={{ 
+                                    backgroundColor: '#0f1424', 
+                                    borderColor: 'rgba(255,255,255,0.1)', 
+                                    borderRadius: '10px',
+                                    fontSize: '11px',
+                                    color: '#fff'
+                                  }} 
+                                  itemStyle={{ color: '#cbd5e1' }}
+                                  cursor={{ fill: 'rgba(255,255,255,0.02)' }}
+                                />
+                                <Bar dataKey="desempenho" radius={[6, 6, 0, 0]}>
+                                  {statsCalculated.dadosDificuldadeChart.map((entry, index) => {
+                                    let color;
+                                    if (entry.dificuldade === 'Médio') color = 'var(--accent-amber)';
+                                    else if (entry.dificuldade === 'Difícil') color = 'var(--accent-rose)';
+                                    else if (entry.dificuldade === 'Muito Difícil') color = '#be123c';
+                                    else color = 'var(--accent-emerald)';
+                                    return <Cell key={`cell-${index}`} fill={color} />;
+                                  })}
+                                </Bar>
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+                        ) : (
+                          <div className="chart-placeholder">
+                            <FileSpreadsheet size={32} style={{ color: 'var(--text-muted)' }} />
+                            <p>
+                              Aba detalhada <em>'por Registro'</em> ausente. Carregue uma planilha completa para processar a estatística por nível de dificuldade.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Chart 5: Acertos e Erros por Capacidade */}
+                      <div className="glass-panel chart-card">
+                        <div className="chart-header">
+                          <h3 className="chart-title">
+                            <span style={{ backgroundColor: 'var(--accent-cyan)' }}></span>
+                            Acertos e Erros por Capacidade
+                          </h3>
+                          <p className="chart-sub">Volume comparativo de acertos (verde) vs. erros (vermelho) por capacidade profissional</p>
+                        </div>
+                        {currentData.possuiAbaRegistro ? (
+                          <div style={{ flexGrow: 1, minHeight: '280px' }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                              <BarChart data={statsCalculated.dadosCapacidadeChart} margin={{ top: 20, right: 10, left: -25, bottom: 5 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                                <XAxis dataKey="capacidade" stroke="#94a3b8" fontSize={10} tickLine={false} />
+                                <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} allowDecimals={false} />
+                                <Tooltip 
+                                  contentStyle={{ 
+                                    backgroundColor: '#0f1424', 
+                                    borderColor: 'rgba(255,255,255,0.1)', 
+                                    borderRadius: '10px',
+                                    fontSize: '11px',
+                                    color: '#fff'
+                                  }} 
+                                  itemStyle={{ color: '#cbd5e1' }}
+                                  cursor={{ fill: 'rgba(255,255,255,0.02)' }}
+                                />
+                                <Bar dataKey="acertos" name="Acertos" fill="var(--accent-emerald)" radius={[4, 4, 0, 0]} />
+                                <Bar dataKey="erros" name="Erros" fill="var(--accent-rose)" radius={[4, 4, 0, 0]} />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+                        ) : (
+                          <div className="chart-placeholder">
+                            <FileSpreadsheet size={32} style={{ color: 'var(--text-muted)' }} />
+                            <p>
+                              Aba detalhada <em>'por Registro'</em> ausente. Carregue uma planilha completa para processar a estatística por capacidade.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
                       {/* Chart 3: Dispersão Tempo vs Acertos */}
                       <div className="glass-panel chart-card col-span-2">
                         <div className="chart-header">
@@ -1903,7 +2383,7 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
                               />
                               <Scatter name="Estudantes" data={statsCalculated.dadosDispersao}>
                                 {statsCalculated.dadosDispersao.map((entry, index) => {
-                                  let color = 'var(--accent-cyan)';
+                                  let color;
                                   if (entry.nivel === 'Excelente') color = 'var(--accent-emerald)';
                                   else if (entry.nivel === 'Bom') color = 'var(--accent-cyan)';
                                   else if (entry.nivel === 'Regular') color = 'var(--accent-amber)';
@@ -2021,6 +2501,45 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
                       </div>
                     </div>
 
+                    {/* Search and Filter Row for general students table */}
+                    <div className="search-filter-row animate-fade-in" style={{ marginTop: '1.5rem', marginBottom: '1rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <div className="search-input-wrapper" style={{ flexGrow: 1, maxWidth: '400px' }}>
+                        <Search size={14} className="search-icon" />
+                        <input
+                          type="text"
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          placeholder="Pesquisar estudante por nome ou matrícula..."
+                          className="search-input"
+                        />
+                      </div>
+                      
+                      <select
+                        value={filterLevel}
+                        onChange={(e) => setFilterLevel(e.target.value)}
+                        className="filter-select"
+                        style={{ minWidth: '180px' }}
+                      >
+                        <option value="todos">Todos os Níveis</option>
+                        <option value="excelente">Excelente (≥90%)</option>
+                        <option value="bom">Bom (70%-89%)</option>
+                        <option value="regular">Regular (50%-69%)</option>
+                        <option value="insuficiente">Insuficiente (&lt;50%)</option>
+                      </select>
+
+                      {(searchQuery || filterLevel !== 'todos') && (
+                        <button
+                          onClick={() => {
+                            setSearchQuery('');
+                            setFilterLevel('todos');
+                          }}
+                          className="btn-clear"
+                        >
+                          Limpar Filtros
+                        </button>
+                      )}
+                    </div>
+
                     {/* Simplified Ranking Table */}
                     <div className="glass-panel table-card animate-fade-in" style={{ marginTop: '0.5rem' }}>
                       <div className="chart-header" style={{ padding: '1.5rem 1.5rem 0.5rem 1.5rem' }}>
@@ -2044,8 +2563,14 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
                             </tr>
                           </thead>
                           <tbody>
-                            {currentData.alunos.map((aluno, index) => {
-                              const rank = index + 1;
+                            {filteredAlunos.length === 0 ? (
+                              <tr>
+                                <td colSpan={7} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-secondary)' }}>
+                                  Nenhum estudante encontrado com os filtros aplicados.
+                                </td>
+                              </tr>
+                            ) : filteredAlunos.map((aluno) => {
+                              const rank = currentData.alunos.findIndex(a => a.matricula === aluno.matricula) + 1;
                               return (
                                 <tr key={aluno.matricula} className="student-row">
                                   <td className="student-rank-cell">
@@ -2325,6 +2850,66 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
                               })()}
                             </div>
 
+                            {/* Prompt de IA Individual do Estudante */}
+                            <div className="glass-panel animate-fade-in" style={{ padding: '2rem', marginTop: '1.5rem' }}>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                                <div>
+                                  <h3 style={{ fontSize: '1rem', color: 'white', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+                                    <Sparkles size={16} style={{ color: 'var(--accent-orange)' }} />
+                                    Prompt de IA: Roteiro de Estudos Personalizado (MSEP)
+                                  </h3>
+                                  <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem', margin: 0 }}>
+                                    Copie o prompt estruturado e cole em uma IA para gerar um plano de reforço individualizado para <strong>{currentAluno.nome}</strong>.
+                                  </p>
+                                </div>
+                                <button
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(iaAlunoPrompt);
+                                    setCopiedAlunoPrompt(true);
+                                    setTimeout(() => setCopiedAlunoPrompt(false), 3000);
+                                  }}
+                                  className="btn-select"
+                                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.5rem', fontSize: '0.8rem', fontWeight: 'bold', background: copiedAlunoPrompt ? 'var(--accent-emerald)' : 'linear-gradient(135deg, var(--accent-orange), #ff8533)', boxShadow: copiedAlunoPrompt ? '0 0 20px var(--accent-emerald-glow)' : 'var(--shadow-glow-orange)' }}
+                                >
+                                  {copiedAlunoPrompt ? (
+                                    <>
+                                      <CheckCircle2 size={16} /> Copiado!
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Sparkles size={16} /> Copiar Prompt do Aluno
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+
+                              <div style={{ position: 'relative' }}>
+                                <textarea
+                                  value={iaAlunoPrompt}
+                                  readOnly
+                                  style={{
+                                    width: '100%',
+                                    height: '240px',
+                                    background: 'rgba(0, 0, 0, 0.45)',
+                                    border: '1px solid var(--border-color)',
+                                    borderRadius: 'var(--radius-sm)',
+                                    color: 'var(--text-secondary)',
+                                    fontFamily: 'monospace',
+                                    fontSize: '0.75rem',
+                                    padding: '1.25rem',
+                                    resize: 'none',
+                                    outline: 'none',
+                                    lineHeight: '1.5'
+                                  }}
+                                />
+                                <div style={{ position: 'absolute', bottom: '1.5rem', right: '1.5rem', display: 'flex', gap: '0.5rem' }}>
+                                  <span style={{ fontSize: '0.65rem', background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)', padding: '0.3rem 0.6rem', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                    {iaAlunoPrompt.length} caracteres
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
                             {/* Response Filter Buttons */}
                             <div className="responses-section-header" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '2rem', marginBottom: '1rem', borderBottom: '1px solid rgba(255, 255, 255, 0.05)', paddingBottom: '0.75rem' }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', width: '100%' }}>
@@ -2454,7 +3039,7 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
                   </div>
                 )}
 
-                {activeSubTab === 'registro' && (
+                {activeSubTab === 'matriz' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                     {!currentData.possuiAbaRegistro ? (
                       <div className="glass-panel animate-fade-in" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
@@ -2502,6 +3087,154 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
                           </div>
                         </div>
 
+                        {/* Dashboard de Análise de Itens */}
+                        <div className="charts-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem', marginTop: '0.5rem' }}>
+                          
+                          {/* Donut Chart: Distribuição de Criticidade */}
+                          <div className="glass-panel chart-card" style={{ display: 'flex', flexDirection: 'column' }}>
+                            <div className="chart-header">
+                              <h3 className="chart-title">
+                                <span style={{ backgroundColor: 'var(--accent-orange)' }}></span>
+                                Classificação das Questões
+                              </h3>
+                              <p className="chart-sub">Distribuição proporcional por nível de criticidade pedagógica</p>
+                            </div>
+                            <div style={{ flexGrow: 1, minHeight: '260px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                  <Pie
+                                    data={pieCriticidadeData}
+                                    cx="50%"
+                                    cy="45%"
+                                    innerRadius={60}
+                                    outerRadius={85}
+                                    paddingAngle={3}
+                                    dataKey="value"
+                                  >
+                                    {pieCriticidadeData.map((entry, index) => (
+                                      <Cell key={`cell-${index}`} fill={entry.fill} />
+                                    ))}
+                                  </Pie>
+                                  <Tooltip
+                                    formatter={(value) => [`${value} itens`, 'Quantidade']}
+                                    contentStyle={{
+                                      backgroundColor: '#0f1424',
+                                      borderColor: 'rgba(255,255,255,0.1)',
+                                      borderRadius: '10px',
+                                      fontSize: '11px',
+                                      color: '#fff'
+                                    }}
+                                  />
+                                  <Legend 
+                                    verticalAlign="bottom" 
+                                    height={36}
+                                    iconType="circle"
+                                    iconSize={8}
+                                    formatter={(value, entry) => {
+                                      const { payload } = entry;
+                                      const pct = ((payload.value / matrizQuestoes.length) * 100).toFixed(0);
+                                      return <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>{value} ({payload.value} - {pct}%)</span>;
+                                    }}
+                                  />
+                                </PieChart>
+                              </ResponsiveContainer>
+                            </div>
+                          </div>
+
+                          {/* Bar Chart: Desempenho por Item */}
+                          <div className="glass-panel chart-card" style={{ display: 'flex', flexDirection: 'column' }}>
+                            <div className="chart-header">
+                              <h3 className="chart-title">
+                                <span style={{ backgroundColor: 'var(--accent-cyan)' }}></span>
+                                Desempenho Individual por Item
+                              </h3>
+                              <p className="chart-sub">Taxa média de acertos de cada questão (ordenado do Item 1 em diante)</p>
+                            </div>
+                            <div style={{ flexGrow: 1, minHeight: '260px' }}>
+                              <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={chartMatrizQuestoes} margin={{ top: 20, right: 10, left: -25, bottom: 5 }}>
+                                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                                  <XAxis dataKey="identificador" stroke="#94a3b8" fontSize={9} tickLine={false} />
+                                  <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} domain={[0, 100]} unit="%" />
+                                  <Tooltip 
+                                    formatter={(value) => [`${value}%`, 'Taxa de Acertos']}
+                                    labelFormatter={(label) => `Item #${label}`}
+                                    contentStyle={{ 
+                                      backgroundColor: '#0f1424', 
+                                      borderColor: 'rgba(255,255,255,0.1)', 
+                                      borderRadius: '10px',
+                                      fontSize: '11px',
+                                      color: '#fff'
+                                    }} 
+                                    itemStyle={{ color: '#cbd5e1' }}
+                                    cursor={{ fill: 'rgba(255,255,255,0.02)' }}
+                                  />
+                                  <Bar dataKey="taxa" radius={[4, 4, 0, 0]}>
+                                    {chartMatrizQuestoes.map((entry, index) => {
+                                      let color = 'var(--accent-emerald)';
+                                      if (entry.status === 'critica') color = 'var(--accent-rose)';
+                                      else if (entry.status === 'atencao') color = 'var(--accent-amber)';
+                                      return <Cell key={`cell-${index}`} fill={color} />;
+                                    })}
+                                  </Bar>
+                                </BarChart>
+                              </ResponsiveContainer>
+                            </div>
+                          </div>
+
+                        </div>
+
+                        {/* Filtros da Matriz de Itens */}
+                        <div className="search-filter-row animate-fade-in" style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center', marginTop: '1rem', marginBottom: '0.5rem' }}>
+                          <div className="search-input-wrapper" style={{ flexGrow: 1, maxWidth: '400px' }}>
+                            <Search size={14} className="search-icon" />
+                            <input
+                              type="text"
+                              value={itemSearchQuery}
+                              onChange={(e) => setItemSearchQuery(e.target.value)}
+                              placeholder="Pesquisar por ID do item, capacidade, assunto..."
+                              className="search-input"
+                            />
+                          </div>
+
+                          <select
+                            value={itemDificuldadeFilter}
+                            onChange={(e) => setItemDificuldadeFilter(e.target.value)}
+                            className="filter-select"
+                            style={{ minWidth: '180px' }}
+                          >
+                            <option value="todos">Todas as Dificuldades</option>
+                            {uniqueDificuldadesItens.map((dif) => (
+                              <option key={dif} value={dif.toLowerCase()}>{dif}</option>
+                            ))}
+                          </select>
+
+                          <select
+                            value={itemStatusFilter}
+                            onChange={(e) => setItemStatusFilter(e.target.value)}
+                            className="filter-select"
+                            style={{ minWidth: '180px' }}
+                          >
+                            <option value="todos">Todos os Níveis (Criticidade)</option>
+                            <option value="critica">🔴 Questões Críticas (&lt;40%)</option>
+                            <option value="atencao">🟡 Questões em Atenção (40%-70%)</option>
+                            <option value="dominada">🟢 Questões Dominadas (&gt;70%)</option>
+                          </select>
+
+                          {(itemSearchQuery || itemDificuldadeFilter !== 'todos' || itemStatusFilter !== 'todos') && (
+                            <button
+                              onClick={() => {
+                                setItemSearchQuery('');
+                                setItemDificuldadeFilter('todos');
+                                setItemStatusFilter('todos');
+                              }}
+                              className="btn-clear"
+                            >
+                              Limpar Filtros
+                            </button>
+                          )}
+                        </div>
+
                         {/* Matriz Pedagógica de Acertos por Item */}
                         <div className="glass-panel table-card animate-fade-in">
                           <div className="chart-header" style={{ padding: '1.5rem 1.5rem 0.5rem 1.5rem' }}>
@@ -2527,50 +3260,75 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
                                 </tr>
                               </thead>
                               <tbody>
-                                {matrizQuestoes.map((q) => (
-                                  <tr key={q.identificador} className="student-row">
-                                    <td style={{ fontWeight: 'bold', color: 'white' }}>Item #{q.identificador}</td>
-                                    <td style={{ fontSize: '0.75rem', color: 'var(--text-primary)' }}>{q.capacidade}</td>
-                                    <td style={{ fontSize: '0.75rem', color: 'var(--text-primary)' }}>{q.subfuncao}</td>
-                                    <td style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{q.padraoDesempenho}</td>
-                                    <td style={{ fontSize: '0.75rem', color: 'var(--text-primary)' }}>{q.conhecimento}</td>
-                                    <td style={{ textAlign: 'center' }}>
-                                      <span className={`difficulty-badge ${q.dificuldade?.toLowerCase() || 'medio'}`}>
-                                        {q.dificuldade || 'Média'}
-                                      </span>
-                                    </td>
-                                    <td>
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                        <div className="progress-bar-bg" style={{ flexGrow: 1, height: '6px', background: 'rgba(255,255,255,0.06)', borderRadius: '3px', position: 'relative' }}>
-                                          <div 
-                                            className="progress-bar-fill" 
-                                            style={{ 
-                                              height: '100%', 
-                                              borderRadius: '3px', 
-                                              width: `${q.taxa}%`, 
-                                              background: q.status === 'critica' ? 'var(--accent-rose)' : q.status === 'atencao' ? 'var(--accent-amber)' : 'var(--accent-emerald)'
-                                            }}
-                                          ></div>
-                                        </div>
-                                        <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: q.status === 'critica' ? 'var(--accent-rose)' : q.status === 'atencao' ? 'var(--accent-amber)' : 'var(--accent-emerald)', width: '45px', textAlign: 'right' }}>
-                                          {q.taxa.toFixed(1)}%
-                                        </span>
-                                      </div>
-                                    </td>
-                                    <td style={{ textAlign: 'center' }}>
-                                      <span className={`badge-score ${q.status === 'critica' ? 'insuficiente' : q.status === 'atencao' ? 'regular' : 'excelente'}`} style={{ fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                        {q.status === 'critica' ? '🔴 Crítica' : q.status === 'atencao' ? '🟡 Atenção' : '🟢 Dominada'}
-                                      </span>
+                                {filteredMatrizQuestoes.length === 0 ? (
+                                  <tr>
+                                    <td colSpan="8" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                                      <Search size={32} style={{ marginBottom: '0.5rem', margin: '0 auto' }} />
+                                      <p>Nenhum item pedagógico encontrado para os filtros selecionados.</p>
                                     </td>
                                   </tr>
-                                ))}
+                                ) : (
+                                  filteredMatrizQuestoes.map((q) => (
+                                    <tr key={q.identificador} className="student-row">
+                                      <td style={{ fontWeight: 'bold', color: 'white' }}>Item #{q.identificador}</td>
+                                      <td style={{ fontSize: '0.75rem', color: 'var(--text-primary)' }}>{q.capacidade}</td>
+                                      <td style={{ fontSize: '0.75rem', color: 'var(--text-primary)' }}>{q.subfuncao}</td>
+                                      <td style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{q.padraoDesempenho}</td>
+                                      <td style={{ fontSize: '0.75rem', color: 'var(--text-primary)' }}>{q.conhecimento}</td>
+                                      <td style={{ textAlign: 'center' }}>
+                                        <span className={`difficulty-badge ${q.dificuldade?.toLowerCase() || 'medio'}`}>
+                                          {q.dificuldade || 'Média'}
+                                        </span>
+                                      </td>
+                                      <td>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                          <div className="progress-bar-bg" style={{ flexGrow: 1, height: '6px', background: 'rgba(255,255,255,0.06)', borderRadius: '3px', position: 'relative' }}>
+                                            <div 
+                                              className="progress-bar-fill" 
+                                              style={{ 
+                                                height: '100%', 
+                                                borderRadius: '3px', 
+                                                width: `${q.taxa}%`, 
+                                                background: q.status === 'critica' ? 'var(--accent-rose)' : q.status === 'atencao' ? 'var(--accent-amber)' : 'var(--accent-emerald)'
+                                              }}
+                                            ></div>
+                                          </div>
+                                          <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: q.status === 'critica' ? 'var(--accent-rose)' : q.status === 'atencao' ? 'var(--accent-amber)' : 'var(--accent-emerald)', width: '45px', textAlign: 'right' }}>
+                                            {q.taxa.toFixed(1)}%
+                                          </span>
+                                        </div>
+                                      </td>
+                                      <td style={{ textAlign: 'center' }}>
+                                        <span className={`badge-score ${q.status === 'critica' ? 'insuficiente' : q.status === 'atencao' ? 'regular' : 'excelente'}`} style={{ fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                          {q.status === 'critica' ? '🔴 Crítica' : q.status === 'atencao' ? '🟡 Atenção' : '🟢 Dominada'}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  ))
+                                )}
                               </tbody>
                             </table>
                           </div>
                         </div>
+                      </>
+                    )}
+                  </div>
+                )}
 
+                {activeSubTab === 'logs' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    {!currentData.possuiAbaRegistro ? (
+                      <div className="glass-panel animate-fade-in" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                        <FileSpreadsheet size={40} style={{ color: 'var(--text-muted)', marginBottom: '1rem', margin: '0 auto' }} />
+                        <h3>Registros de Respostas Indisponíveis</h3>
+                        <p style={{ maxWidth: '400px', margin: '0.5rem auto' }}>
+                          Esta planilha não contém dados de registros de respostas por questão. Importe uma planilha contendo a aba detalhada "por Registro" para habilitar a visualização dos logs brutos.
+                        </p>
+                      </div>
+                    ) : (
+                      <>
                         {/* Flat Log Table */}
-                        <div className="glass-panel table-card animate-fade-in" style={{ marginTop: '0.5rem' }}>
+                        <div className="glass-panel table-card animate-fade-in">
                           <div className="chart-header" style={{ padding: '1.5rem 1.5rem 1rem 1.5rem', display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
                             <div>
                               <h3 className="chart-title">
@@ -2675,9 +3433,11 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
                                 >
                                   Anterior
                                 </button>
-                                <span style={{ fontSize: '0.7rem', color: 'white', padding: '0 0.5rem', fontFamily: 'monospace' }}>
-                                  Página {registroPage} de {maxRegistroPages}
+                                
+                                <span style={{ fontSize: '0.7rem', color: 'var(--text-primary)', padding: '0 0.5rem' }}>
+                                  Página <strong>{registroPage}</strong> de <strong>{maxRegistroPages}</strong>
                                 </span>
+                                
                                 <button
                                   onClick={() => setRegistroPage(prev => Math.min(maxRegistroPages, prev + 1))}
                                   disabled={registroPage === maxRegistroPages}
@@ -2837,7 +3597,10 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
         <div className="container footer-content">
           <div className="footer-left">
             <p className="footer-copyright">
-              © {new Date().getFullYear()} - Desenvolvido por <span className="footer-highlight">Peterson Ferreira</span>
+              © {new Date().getFullYear()} - Desenvolvido pelo <span className="footer-highlight">Professor Peterson Ferreira</span>
+            </p>
+            <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+              Contato: <a href="mailto:peterson.ferreira@edu.sc.senai.br" style={{ color: 'var(--accent-cyan)', textDecoration: 'none' }}>peterson.ferreira@edu.sc.senai.br</a>
             </p>
             <p className="footer-subtext">Dashboard SAEP - Portal de Acompanhamento e Análise Pedagógica Avançada</p>
           </div>
@@ -2863,27 +3626,26 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
             <div className="help-modal-body">
               <h3 style={{ fontSize: '1rem', color: 'white', display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.75rem' }}>
                 <FileSpreadsheet size={16} style={{ color: 'var(--accent-cyan)' }} />
-                Como obter as planilhas do SAEP?
+                Como obter e importar as planilhas do SAEP?
               </h3>
               
               <p style={{ marginBottom: '1rem' }}>
-                O processador pedagógico interpreta a planilha no formato padrão gerado pelo sistema de relatórios do SAEP. Para habilitar todos os recursos, siga os passos abaixo:
+                O portal processa os dados de desempenho a partir da planilha de dados brutos oficiais do SAEP. Siga as orientações abaixo para importar:
               </p>
               
               <div className="help-steps-card">
-                <h4>Instruções de Exportação:</h4>
+                <h4>Instruções de Importação:</h4>
                 <ul className="help-steps-list">
-                  <li>Acesse o portal oficial do SAEP com suas credenciais de gestor/docente.</li>
-                  <li>Navegue até a aba de **Resultados** e selecione a avaliação desejada.</li>
-                  <li>Clique em **Exportar Planilha de Desempenho** (certifique-se de exportar o arquivo contendo a aba detalhada por registros).</li>
-                  <li>Arraste o arquivo `.xls` ou `.xlsx` diretamente na área de upload deste portal.</li>
+                  <li><strong>Solicite a planilha:</strong> Entre em contato com a coordenação pedagógica ou com a pessoa responsável pelo SAEP na sua instituição e peça a planilha em formato Excel contendo os <strong>dados brutos de desempenho</strong> (certifique-se de que a aba detalhada <em>"por Registro"</em> esteja presente no arquivo).</li>
+                  <li><strong>Faça a importação:</strong> Arraste e solte o arquivo `.xls` ou `.xlsx` diretamente na área de upload deste portal, ou clique nela para escolher o arquivo em seu dispositivo.</li>
+                  <li><strong>Modo Multi-Turmas:</strong> Importe planilhas de diferentes turmas ou cursos simultaneamente para criar abas de navegação rápida e alternar/comparar os resultados com facilidade.</li>
                 </ul>
               </div>
 
               <div style={{ marginTop: '1rem', padding: '0.75rem', background: 'rgba(6, 182, 212, 0.05)', borderRadius: '8px', border: '1px solid rgba(6, 182, 212, 0.15)', display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
                 <Sparkles size={16} style={{ color: 'var(--accent-cyan)', shrink: 0, marginTop: '0.15rem' }} />
                 <p style={{ margin: 0, fontSize: '0.7rem', color: 'rgba(255, 255, 255, 0.8)' }}>
-                  <strong>Múltiplos Cursos:</strong> Você pode arrastar arquivos de diferentes turmas e cursos simultaneamente. O portal irá gerar abas superiores para que você alterne e compare os resultados de forma dinâmica.
+                  <strong>Nuvem Ativa:</strong> Se você estiver logado em sua conta Supabase, todas as planilhas que você importar ficarão salvas automaticamente na nuvem, permitindo que você as acesse de qualquer dispositivo sem precisar reenviar os arquivos.
                 </p>
               </div>
 
@@ -2893,6 +3655,112 @@ Com base no diagnóstico acima, elabore um plano de ação e revisão pedagógic
               >
                 Entendido, prosseguir
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* About Modal Dialog */}
+      {showAboutModal && (
+        <div className="help-modal-overlay">
+          <div className="glass-panel help-modal animate-fade-in" style={{ maxWidth: '500px' }}>
+            <button 
+              onClick={() => setShowAboutModal(false)}
+              className="help-close-btn"
+            >
+              <X size={16} />
+            </button>
+            
+            <div className="help-modal-body">
+              <h3 style={{ fontSize: '1.1rem', color: 'white', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                <Info size={20} style={{ color: 'var(--accent-cyan)' }} />
+                Sobre o Dashboard SAEP
+              </h3>
+              
+              <p style={{ marginBottom: '1rem', lineHeight: '1.5', fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+                Este portal foi desenvolvido para apoiar professores, coordenadores pedagógicos e tutores do <strong>SENAI</strong> no diagnóstico rápido e na análise de dados de provas e simulados objetivos do <strong>SAEP</strong> (Sistema de Avaliação da Educação Profissional).
+              </p>
+
+              <div className="help-steps-card" style={{ padding: '1rem', marginBottom: '1rem' }}>
+                <h4 style={{ color: 'white', fontSize: '0.85rem', marginBottom: '0.5rem', fontWeight: 'bold' }}>Propósito e Intenção:</h4>
+                <ul className="help-steps-list" style={{ fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <li><strong>Análise de Provas/Simulados:</strong> Automatizar e simplificar a leitura dos dados brutos das provas objetivas, transformando tabelas complexas em gráficos e visões direcionadas de desempenho.</li>
+                  <li><strong>Apoio ao Docente:</strong> Auxiliar na identificação imediata dos maiores gargalos de aprendizagem (tanto da turma inteira quanto individualmente).</li>
+                  <li><strong>Planos de Ação Pedagógica:</strong> Apoiar professores na tomada de decisão e na elaboração rápida de planos de ação direcionados (utilizando prompts otimizados de IA e metodologias estruturadas como a MSEP).</li>
+                </ul>
+              </div>
+
+              <div style={{ marginTop: '1.25rem', padding: '0.75rem', background: 'rgba(6, 182, 212, 0.05)', borderRadius: '8px', border: '1px solid rgba(6, 182, 212, 0.15)', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <Sparkles size={16} style={{ color: 'var(--accent-cyan)', shrink: 0 }} />
+                <p style={{ margin: 0, fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.85)', fontWeight: '500' }}>
+                  Foco na excelência educacional e no sucesso dos alunos!
+                </p>
+              </div>
+
+              <button
+                onClick={() => setShowAboutModal(false)}
+                className="btn-help-modal-ok"
+                style={{ marginTop: '1.25rem' }}
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rename Modal Dialog */}
+      {renamingTabKey && (
+        <div className="help-modal-overlay">
+          <div className="glass-panel help-modal animate-fade-in" style={{ maxWidth: '400px' }}>
+            <button 
+              onClick={() => setRenamingTabKey(null)}
+              className="help-close-btn"
+            >
+              <X size={16} />
+            </button>
+            
+            <div className="help-modal-body">
+              <h3 style={{ fontSize: '1.1rem', color: 'white', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                <Edit2 size={18} style={{ color: 'var(--accent-cyan)' }} />
+                Renomear Turma / Planilha
+              </h3>
+              
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+                Digite o novo nome para identificar esta planilha:
+              </p>
+
+              <input
+                type="text"
+                value={renameInputVal}
+                onChange={(e) => setRenameInputVal(e.target.value)}
+                placeholder="Ex: Técnico em Eletromecânica - Turma A"
+                className="search-input"
+                style={{ width: '100%', padding: '0.75rem', marginBottom: '1.5rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white' }}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleRenameConfirm();
+                  }
+                }}
+              />
+
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => setRenamingTabKey(null)}
+                  className="btn-clear"
+                  style={{ padding: '0.5rem 1rem' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleRenameConfirm}
+                  className="btn-help-modal-ok"
+                  style={{ margin: 0, padding: '0.5rem 1.25rem' }}
+                >
+                  Salvar Nome
+                </button>
+              </div>
             </div>
           </div>
         </div>
